@@ -42,3 +42,20 @@ class InvalidTokenError(APIException):
     status_code = 401
     default_detail = "Invalid or expired token."
     default_code = "invalid_token"
+
+
+class InvalidApplicationCredentialError(APIException):
+    """Raised when a Gait ApplicationCredential (machine identity) is missing or rejected.
+
+    Deliberately separate from `InvalidTokenError` (human JWT identity) —
+    the two identity concepts (see `auth_integration.application`) must
+    never be confused by a caller catching one and assuming it covers the
+    other. Kept as a single exception (not a hierarchy of "expired" /
+    "revoked" / "unknown" subtypes) because Gait's own verification
+    endpoint deliberately does not distinguish these reasons in its
+    response either — this SDK does not attempt to re-derive a
+    finer-grained reason.
+    """
+    status_code = 401
+    default_detail = "Invalid application credential."
+    default_code = "invalid_application_credential"

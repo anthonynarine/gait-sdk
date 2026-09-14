@@ -89,6 +89,18 @@ def _get_setting(name: str, default: Optional[str] = None) -> Optional[str]:
 GAIT_AUTH_URL: Optional[str] = _get_setting("GAIT_AUTH_URL") or _get_setting("AUTH_API_URL")
 GAIT_TIMEOUT: int = int(_get_setting("GAIT_TIMEOUT", "5"))
 
+# SDK2: the Gait ApplicationCredential (machine/software identity secret —
+# see auth_integration.application). Server-side only; never sent to a
+# browser, never given a default/fake value, and never logged — `_get_setting`
+# above only ever logs the setting NAME, never its value, for any setting,
+# so this is safe by construction. Unlike GAIT_AUTH_URL, no warning is
+# logged when this is unset: most consumers of this package only use human
+# identity (ClaimsUser/whoami) and never touch application identity at all,
+# so an absent credential here is normal, not a misconfiguration to warn
+# about at import time — auth_integration.application.verify_application()
+# raises explicitly if it's actually needed and missing at call time.
+GAIT_APPLICATION_CREDENTIAL: Optional[str] = _get_setting("GAIT_APPLICATION_CREDENTIAL")
+
 # -----------------------------------------------------------------------------
 # 🧠 Sanity Check & Safe Logging
 # -----------------------------------------------------------------------------

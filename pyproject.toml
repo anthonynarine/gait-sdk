@@ -38,9 +38,25 @@ dependencies = [
 [project.optional-dependencies]
 # Install with `auth_integration[django]` for the DRF authentication adapter
 # (auth_integration.django.authentication / auth_integration.authentication).
-# Django itself is not listed explicitly: djangorestframework already
-# declares it as its own dependency, so it installs transitively.
+#
+# SDK2 revisits SDK1's original choice to leave Django out of this list and
+# rely on djangorestframework installing it transitively. `auth_integration`
+# does directly import Django itself, not just DRF: `auth_integration/settings.py`
+# (core, imported regardless of which extra is installed) does
+# `from django.conf import settings as django_settings` inside a try/except
+# so it stays optional when Django isn't present at all — but when the
+# [django] extra IS installed, that import is a real, direct runtime
+# dependency, not merely DRF's implementation detail. Per SDK2's stated
+# principle ("if our code directly imports a runtime dependency, declare it
+# directly"), Django is now listed explicitly here rather than left to
+# whatever range djangorestframework's own install_requires happens to pin.
+# Floor picked to match the oldest Django LTS still supported as of this
+# milestone and to stay compatible with the existing djangorestframework
+# floor below (not a version this package has been newly tested against —
+# just a documented, non-arbitrary choice, consistent with what SDK1's own
+# clean-install verification already exercised at the high end, Django 5.2).
 django = [
+    "Django >=4.2",
     "djangorestframework >=3.14",
     "asgiref >=3.6",
 ]

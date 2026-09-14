@@ -7,6 +7,23 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
+## [Unreleased] — SDK2: Application Identity
+
+Not yet tagged/released. Additive only — no change to `ClaimsUser`, human
+JWT/claims behavior, or any existing public import path.
+
+### Added
+- `auth_integration.application.ApplicationPrincipal` — an immutable, framework-neutral value object representing a Gait-verified machine/software identity (`application_id`, `application_slug`, `organization_id`, `organization_slug`, `environment`). No credential field, no human role, no Lumen-domain fields.
+- `auth_integration.application.verify_application(credential=None)` — verifies a Gait `ApplicationCredential` against the frozen Gait backend endpoint `POST {GAIT_AUTH_URL}/applications/verify/`, sent via the dedicated `Gait-Application-Credential` header (never `Authorization: Bearer`). Falls back to the new `GAIT_APPLICATION_CREDENTIAL` setting when no credential is passed explicitly; raises immediately (no network call) if neither is present.
+- New `auth_integration.exceptions.InvalidApplicationCredentialError` (401) — kept deliberately separate from `InvalidTokenError` (human identity failures) and deliberately a single exception (Gait's own verification response doesn't distinguish missing/unknown/revoked/expired/suspended-application reasons either).
+- New `GAIT_APPLICATION_CREDENTIAL` setting, read through the existing `auth_integration.settings` loader (Django settings, then environment/`.env`) — server-side only, no default, never logged.
+- `auth_integration/docs/AuthIntegration_Application_Identity.md` — full contract: `ClaimsUser` vs `ApplicationPrincipal`, credential configuration, wire format, and why organization/environment authority belongs to Gait alone (no caller override exists).
+- `tests/test_application.py` (34 tests): valid/invalid/missing credential, network failure, timeout, malformed JSON, structurally-invalid responses (missing/empty/wrong-typed fields, unknown environment), `ApplicationPrincipal` construction/immutability, raw-credential absence from repr/logs/exception messages, organization/environment authority, no caller-side tenant-override parameter, and human/application identity independence in both directions.
+
+### Fixed / Changed (SDK1 follow-ups, same milestone)
+- `pyproject.toml`'s `[django]` extra now declares `Django >=4.2` explicitly instead of relying on `djangorestframework`'s own transitive dependency — `auth_integration/settings.py` directly imports `django.conf.settings`, so this is a real, direct runtime dependency of this package, not only DRF's.
+- Added an end-to-end regression test (`tests/test_role_dependency_status_codes.py`) proving the FastAPI role-check flow keeps a real authentication failure (missing/invalid token → 401, `WWW-Authenticate: Bearer`) distinct from an authorization failure (authenticated but wrong role → 403) — confirmed the existing `require_role`/`verify_token` composition already behaved correctly; no production code change was needed, only the missing test.
+
 ## [Unreleased] — SDK1: Foundation Hardening
 
 Not yet tagged/released — see the SDK1 report for full context. No version

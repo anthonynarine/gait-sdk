@@ -42,8 +42,9 @@ flowchart TD
 | `utils.py` | Helper utilities for claims & roles | All |
 | `django/authentication.py` | Authentication backend for DRF | Django |
 | `fastapi/dependencies.py` | Async dependency for route protection | FastAPI |
-| `settings.py` | Reads `GAIT_AUTH_URL` / `GAIT_TIMEOUT` from Django settings or `.env`, framework-agnostic | All |
+| `settings.py` | Reads `GAIT_AUTH_URL` / `GAIT_TIMEOUT` / `GAIT_APPLICATION_CREDENTIAL` from Django settings or `.env`, framework-agnostic | All |
 | `authentication.py` (top-level) | Stable public re-export of `django/authentication.py`'s `ExternalJWTAuthentication` — import from here, not the internal path | Django |
+| `application.py` (SDK2) | `ApplicationPrincipal` + `verify_application()` — machine/software identity, verified against Gait's `/applications/verify/`. Framework-agnostic; see `AuthIntegration_Application_Identity.md` | All |
 
 ---
 

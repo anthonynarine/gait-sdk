@@ -219,6 +219,22 @@ async def secure_again(claims=Depends(verify_token), current=Depends(get_current
 
 ---
 
+## Application (machine) identity — SDK2
+
+Everything above is **human** identity (`ClaimsUser` — who is making this request). SDK2 adds a second, deliberately separate primitive for **machine/software** identity — which registered application is calling Gait — never merged with `ClaimsUser` and never granting the authority of the other:
+
+```python
+from auth_integration.application import ApplicationPrincipal, verify_application
+
+principal = await verify_application()  # reads GAIT_APPLICATION_CREDENTIAL
+# principal.application_id / .application_slug / .organization_id / .organization_slug / .environment
+# — all four identity fields come only from Gait's verification response, never from caller input.
+```
+
+`GAIT_APPLICATION_CREDENTIAL` is a backend-only secret (never sent to a browser, never logged, no default) configured the same way as `GAIT_AUTH_URL`. See `auth_integration/docs/AuthIntegration_Application_Identity.md` for the full contract: the wire format (`POST {GAIT_AUTH_URL}/applications/verify/`, credential sent via a dedicated `Gait-Application-Credential` header — never `Authorization: Bearer`), the failure semantics, and why organization/environment authority belongs to Gait alone. No Django/FastAPI request wiring exists for this yet, and no `SecurityContext` composing the two identities exists yet either — both are deliberately out of scope for this milestone.
+
+---
+
 ## Authorization (RBAC) guidance
 
 `auth_integration` intentionally focuses on **authentication** (who you are). Your services implement **authorization** (what you can do).
