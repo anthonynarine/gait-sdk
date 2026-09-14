@@ -43,7 +43,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Literal, Optional, TypedDict, cast
+from typing import Optional, TypedDict, cast
 
 import httpx
 from asgiref.sync import async_to_sync
@@ -72,7 +72,12 @@ AUTH_COOKIE_KEYS: set[str] = {"access_token", "refresh_token", "temp_token"}
 class BaseUserClaims(TypedDict):
     id: str
     email: str
-    role: Literal["admin", "physician", "technologist"]
+    # `role` is an opaque, consuming-application-defined string. This SDK does not
+    # define or restrict the business role vocabulary (e.g. Lumen's
+    # "admin"/"physician"/"technologist") — it only carries whatever Gait's
+    # /whoami/ returns. See docs/settings.md / README "Authorization (RBAC)
+    # guidance" for the identity-vs-authorization boundary this reflects.
+    role: str
     first_name: str
     last_name: str
 
@@ -91,7 +96,8 @@ class ClaimsUser:
 
     id: str
     email: str
-    role: Literal["admin", "physician", "technologist"]
+    # Opaque, consuming-application-defined role string — see BaseUserClaims.role.
+    role: str
     first_name: str
     last_name: str
 
@@ -217,14 +223,19 @@ def _validate_claims_shape(raw: object) -> UserClaims:
     if not isinstance(raw, dict):
         raise AuthenticationFailed("Invalid authentication response.")
 
+    # Step 1: Required keys must be present AND be non-empty strings. This is
+    # deliberately generic about `role` — this SDK does not define or restrict
+    # a consuming application's role vocabulary (see BaseUserClaims.role) — but
+    # every one of these fields is documented as a string, so a non-string or
+    # empty value is malformed identity data and must fail closed rather than
+    # silently pass through as an anonymous or partially-formed user.
     required = ("id", "email", "role", "first_name", "last_name")
     for key in required:
         if key not in raw:
             raise AuthenticationFailed("Invalid authentication response.")
-
-    role = raw.get("role")
-    if role not in ("admin", "physician", "technologist"):
-        raise AuthenticationFailed("Invalid authentication response.")
+        value = raw[key]
+        if not isinstance(value, str) or not value:
+            raise AuthenticationFailed("Invalid authentication response.")
 
     return cast(UserClaims, raw)
 

@@ -74,29 +74,94 @@ except ImportError:
     # ------------------------------------------------------------
     # FastAPI / Non-DRF Fallback Implementation
     # ------------------------------------------------------------
+    # Security rule (SDK1): none of these may silently grant access just
+    # because DRF isn't installed. Every path below fails closed (denies)
+    # on missing/invalid claims or a role mismatch. Importing this module
+    # never requires FastAPI (matches the file's own "importing never
+    # breaks" design goal) — only *using* `require_role` without FastAPI
+    # installed raises a clear RuntimeError instead of silently no-op'ing.
+    import functools
+
+    try:
+        from fastapi import HTTPException
+        _FASTAPI_AVAILABLE = True
+    except ImportError:  # pragma: no cover - exercised only without fastapi installed
+        HTTPException = None  # type: ignore[assignment]
+        _FASTAPI_AVAILABLE = False
+
+    def _require_fastapi() -> None:
+        if not _FASTAPI_AVAILABLE:
+            raise RuntimeError(
+                "auth_integration.permissions.require_role requires FastAPI to "
+                "be installed to enforce role checks. Install FastAPI, or use "
+                "auth_integration.permissions.HasRole/HasAnyRole directly "
+                "against verified claims."
+            )
+
     def require_role(role: str):
         """
-        FastAPI-compatible route decorator for role-based access control.
+        FastAPI route decorator enforcing a single required role.
 
-        Usage:
+        Contract: the wrapped route function must receive its verified Gait
+        claims via a `claims` keyword argument — the same convention as
+        `auth_integration.fastapi.dependencies.verify_token` and the
+        package README's FastAPI quickstart:
+
             @require_role("admin")
-            async def admin_only(...):
+            async def admin_only(claims=Depends(verify_token)):
                 ...
+
+        Fails closed (raises HTTPException(403)) if `claims` is missing, is
+        not a dict, or its `role` does not match — it never falls through
+        to calling the wrapped function on missing/invalid identity.
         """
         def decorator(func):
+            @functools.wraps(func)
             async def wrapper(*args, **kwargs):
-                # Fallback: in a real FastAPI app, you'd extract claims from Depends(get_claims)
+                _require_fastapi()
+                claims = kwargs.get("claims")
+                if not isinstance(claims, dict) or claims.get("role") != role:
+                    raise HTTPException(status_code=403, detail="Insufficient role.")
                 return await func(*args, **kwargs)
             return wrapper
         return decorator
 
-    # Stub classes for compatibility if imported in FastAPI services
     class HasRole:
-        """Placeholder for non-DRF environments."""
-        def __init__(self, *args, **kwargs): ...
-        def has_permission(self, *args, **kwargs) -> bool: return True
+        """
+        Non-DRF role check for FastAPI-style/framework-agnostic code.
+
+        Not wired into any FastAPI dependency-injection mechanism — FastAPI
+        has no `permission_classes` equivalent, so unlike the DRF version
+        this is never invoked automatically. Call `has_permission` directly
+        against verified claims, e.g.:
+
+            checker = HasRole("admin")
+            if not checker.has_permission(claims):
+                raise HTTPException(status_code=403)
+
+        Fails closed: returns False (never True) for missing/non-dict claims.
+        """
+
+        def __init__(self, required_role: str):
+            self.required_role = required_role
+
+        def has_permission(self, claims: "dict | None") -> bool:
+            if not isinstance(claims, dict):
+                return False
+            return claims.get("role") == self.required_role
 
     class HasAnyRole:
-        """Placeholder for non-DRF environments."""
-        def __init__(self, *args, **kwargs): ...
-        def has_permission(self, *args, **kwargs) -> bool: return True
+        """
+        Non-DRF check for "role is one of several allowed roles".
+
+        Same caveat as HasRole: not wired into any FastAPI mechanism, call
+        `has_permission` directly. Fails closed on missing/non-dict claims.
+        """
+
+        def __init__(self, allowed_roles: list[str]):
+            self.allowed_roles = allowed_roles
+
+        def has_permission(self, claims: "dict | None") -> bool:
+            if not isinstance(claims, dict):
+                return False
+            return claims.get("role") in self.allowed_roles

@@ -101,3 +101,27 @@ async def test_validate_token_malformed_json(monkeypatch):
 
     with pytest.raises(AuthServiceUnavailable):
         await validate_token("valid.token")
+
+
+# ---------------------------------------------------------------------
+# ⏱️ Timeout — SDK1 A3: explicitly simulate httpx.TimeoutException
+# ---------------------------------------------------------------------
+async def test_validate_token_timeout_raises_auth_service_unavailable(monkeypatch):
+    """
+    A timeout talking to Gait must translate to AuthServiceUnavailable (503),
+    the same as any other unreachable-service case.
+
+    httpx.TimeoutException IS an httpx.RequestError subclass, so the existing
+    `except httpx.RequestError` in validate_token() already covers this —
+    this test proves that explicitly (by raising TimeoutException itself,
+    not a generic RequestError) rather than trusting the inheritance
+    relationship implicitly.
+    """
+
+    async def mock_get(self, url, headers):
+        raise httpx.TimeoutException("Timed out waiting for Gait")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+
+    with pytest.raises(AuthServiceUnavailable):
+        await validate_token("any.token")

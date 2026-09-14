@@ -11,6 +11,14 @@ This module is the FastAPI equivalent of Django’s `ExternalJWTAuthentication`.
 It verifies a Bearer token, returns the user claims, and raises an
 `HTTPException(401)` if invalid.
 
+Scope (SDK1, intentional): Bearer-token mode only. Django's adapter also
+supports cookie-mode (forwarding whitelisted HttpOnly cookies to /whoami/)
+because that's how Lumen's production cookie-based sessions work; no current
+FastAPI consumer of this package needs that, so cookie-mode parity is out of
+scope here rather than added speculatively. If a future FastAPI consumer
+needs cookie-mode, add it as an additive extension, the same way Django's
+adapter grew it on top of Bearer-mode.
+
 Teaching Notes:
 ---------------
 - Uses the shared async validator from `auth_integration.client`.
@@ -25,6 +33,14 @@ from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_503_SERVICE_UNAVAILABLE
 
 from auth_integration.client import validate_token
 from auth_integration.exceptions import InvalidTokenError, AuthServiceUnavailable
+
+# Advertised on every 401 response, mirroring the Django adapter's
+# authenticate_header() contract (see django/authentication.py). FastAPI has
+# no DRF-style automatic 401->403 downgrade, so this isn't fixing a status-
+# code bug here the way it did for DRF — it's kept so a client written
+# against the Bearer/WWW-Authenticate challenge convention gets the same
+# header from either framework's adapter.
+_WWW_AUTHENTICATE_BEARER = {"WWW-Authenticate": "Bearer"}
 
 
 # -----------------------------------------------------------------------------
@@ -44,20 +60,30 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # 🔐 Core Dependency — verify_token
 # -----------------------------------------------------------------------------
 async def verify_token(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
     """
     FastAPI dependency that validates a Bearer JWT via Gait Auth API.
 
     Args:
+        request (Request): The current request. Used only to attach the
+            verified claims to `request.state.user` for `get_current_user()`
+            — never read from for credentials (those come from `credentials`,
+            via FastAPI's own `HTTPBearer` extraction).
         credentials (HTTPAuthorizationCredentials): Automatically extracted
             by FastAPI's `HTTPBearer` from the request header.
 
     Returns:
         dict: User claims (e.g. {"id": "user-123", "email": "...", "role": "physician"}).
+            The same dict is attached to `request.state.user`, so either the
+            return value or `get_current_user(request)` gives the identical,
+            already-verified claims — there is exactly one verified-identity
+            source of truth per request, not two.
 
     Raises:
-        HTTPException(401): If the token is invalid or missing.
+        HTTPException(401): If the token is invalid or missing (with a
+            `WWW-Authenticate: Bearer` header — see module docstring).
         HTTPException(503): If Gait Auth API is unreachable.
 
     Teaching Notes:
@@ -70,6 +96,7 @@ async def verify_token(
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
             detail="Authorization header missing or malformed.",
+            headers=_WWW_AUTHENTICATE_BEARER,
         )
 
     token = credentials.credentials
@@ -77,7 +104,11 @@ async def verify_token(
     try:
         logger.info("Validating Bearer token via Gait Auth API.")
         user_claims = await validate_token(token)
-        logger.info("✅ Token validated successfully (claims attached).")
+        logger.info("Token validated successfully (claims attached).")
+        # Step: make the verified claims available via get_current_user()
+        # too, so request.state.user is never stale/unset for a request
+        # that successfully passed through this dependency.
+        request.state.user = user_claims
         return user_claims
 
     except InvalidTokenError as e:
@@ -85,6 +116,7 @@ async def verify_token(
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token.",
+            headers=_WWW_AUTHENTICATE_BEARER,
         )
     except AuthServiceUnavailable as e:
         logger.error(f"Auth service unavailable: {e}")
@@ -97,6 +129,7 @@ async def verify_token(
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
             detail="Authentication error.",
+            headers=_WWW_AUTHENTICATE_BEARER,
         )
 
 
@@ -105,8 +138,14 @@ async def verify_token(
 # -----------------------------------------------------------------------------
 async def get_current_user(request: Request) -> dict:
     """
-    Returns the user claims previously validated and attached to request.state.user.
+    Returns the user claims previously validated and attached to
+    request.state.user by `verify_token()`.
 
-    This helper can be used in downstream routes that depend on `verify_token`.
+    This only returns non-empty claims for a request that has already gone
+    through `verify_token` as a dependency (directly or via another
+    dependency that itself depends on it) earlier in the same request —
+    it does not perform validation itself. Returns `{}` if `verify_token`
+    has not run for this request (e.g. an anonymous-allowed route, or a
+    route that doesn't depend on `verify_token` at all).
     """
     return getattr(request.state, "user", {})

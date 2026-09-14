@@ -107,26 +107,38 @@ Why that matters: any frontend that does the standard "catch 401, refresh the to
 
 > Passwords are never returned, ever.
 
+**`role` is an opaque, consuming-application-defined string** — this package does not define or restrict a role vocabulary. Lumen currently uses `admin` / `physician` / `technologist`, but that's Lumen's business-role vocabulary, not something the SDK's identity contract requires; a different consuming application can use entirely different role strings and this package will validate/carry them the same way (any non-empty string). The only runtime requirement is that `role`, like every other required claim field, is a non-empty string — a missing, non-string, or empty `role` fails closed (see [Error behavior](#error-behavior)).
+
 ---
 
 ## Installation
 
 ```bash
-pip install "auth_integration @ git+https://github.com/anthonynarine/auth_integration.git@v0.3.12"
+pip install "auth_integration[django] @ git+https://github.com/anthonynarine/auth_integration.git@v0.3.12"
+```
+
+Or, for a FastAPI service:
+
+```bash
+pip install "auth_integration[fastapi] @ git+https://github.com/anthonynarine/auth_integration.git@v0.3.12"
 ```
 
 Pin to an exact **commit hash** instead of a tag if you want reproducibility independent of tag mutation:
 
 ```bash
-pip install "auth_integration @ git+https://github.com/anthonynarine/auth_integration.git@9499defd80eb147cbd38f6b5d88c6218fc8bb18f"
+pip install "auth_integration[django] @ git+https://github.com/anthonynarine/auth_integration.git@9499defd80eb147cbd38f6b5d88c6218fc8bb18f"
 ```
 
 Both `lumen_reports/requirements.txt` and `lumen_ai/brain/backend/requirements.txt` currently pin by commit hash, not tag — check those files for the exact convention each consumer uses before assuming.
 
-### Requirements
+### Requirements / installation extras
 - Python 3.10+
-- Django + DRF **or** FastAPI
-- `httpx`, `asgiref` (Django/DRF adapter), `python-decouple` (recommended for env config)
+- Core (always installed): `httpx`, `python-decouple`
+- `auth_integration[django]` — adds `djangorestframework`, `asgiref` (Django itself installs transitively via djangorestframework) for `ExternalJWTAuthentication`
+- `auth_integration[fastapi]` — adds `fastapi`, `starlette` for `verify_token`/`get_current_user`
+- `auth_integration[test]` — adds `pytest`, `pytest-asyncio` to run this package's own test suite
+
+A consumer only needs the extra(s) matching the framework(s) it actually uses — installing `auth_integration` alone (no extras) gives you the framework-agnostic core (`client.py`, `settings.py`, `exceptions.py`, `utils.py`) without pulling in Django or FastAPI at all.
 
 ---
 
@@ -185,14 +197,25 @@ If no `Authorization: Bearer ...` header is present, the DRF adapter validates b
 
 ```python
 from fastapi import FastAPI, Depends
-from auth_integration.fastapi.dependencies import verify_token
+from auth_integration.fastapi.dependencies import verify_token, get_current_user
 
 app = FastAPI()
 
 @app.get("/secure")
 async def secure_endpoint(claims=Depends(verify_token)):
     return {"user": claims["email"], "role": claims["role"]}
+
+# A downstream dependency (or another route) that doesn't want to redeclare
+# Depends(verify_token) can read the same already-verified claims back:
+@app.get("/secure-again")
+async def secure_again(claims=Depends(verify_token), current=Depends(get_current_user)):
+    assert current == claims  # same verified identity, read a second way
+    return {"user": current["email"]}
 ```
+
+**Contract**: `verify_token` both returns the verified claims *and* attaches them to `request.state.user`, so `get_current_user(request)` reflects the exact same identity for any dependency/route that runs after `verify_token` in the same request. `get_current_user` never validates anything itself — for a request where `verify_token` hasn't run (e.g. a route with no auth dependency at all), it returns `{}`, not an error.
+
+**Bearer-only, intentionally.** Unlike the Django adapter, the FastAPI dependency only supports `Authorization: Bearer <token>` — there is no cookie-mode equivalent. This mirrors what FastAPI consumers of Gait actually need today (no current FastAPI consumer of this package uses cookie-based sessions); if a future consumer needs cookie-mode, it should be added the same additive way Django's adapter grew it on top of Bearer-mode, not assumed.
 
 ---
 
@@ -204,6 +227,8 @@ async def secure_endpoint(claims=Depends(verify_token)):
 - Your service (e.g. `lumen_reports`): defines the actual permission rules — role checks, object-level checks, tenant-membership checks. See `auth_integration.permissions.HasRole` / `HasAnyRole` for simple role gating, or build your own (Lumen's `organizations.permissions.IsOrgMember` is a real example of a service-specific permission built on top of this package's claims).
 
 This keeps the shared library lightweight and undomained — it never needs to know about exams, organizations, or any other business concept.
+
+**Fail-closed guarantee.** `HasRole`, `HasAnyRole`, and `require_role` never silently grant access just because a framework-specific implementation is unavailable. Under DRF they're real `BasePermission` subclasses. In a DRF-less (FastAPI-style) environment, `HasRole`/`HasAnyRole` are called directly against a verified claims dict (`checker.has_permission(claims)` — not wired into any FastAPI dependency-injection mechanism, since FastAPI has no `permission_classes` equivalent) and `require_role` is a decorator expecting the wrapped route to receive its claims via a `claims=Depends(verify_token)` keyword argument. In every case — missing claims, non-dict claims, or a role mismatch — the result is **deny**, never an accidental pass-through. See `auth_integration/docs/permissions.md` for the full contract.
 
 ---
 
