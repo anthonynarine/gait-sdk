@@ -231,7 +231,26 @@ principal = await verify_application()  # reads GAIT_APPLICATION_CREDENTIAL
 # — all four identity fields come only from Gait's verification response, never from caller input.
 ```
 
-`GAIT_APPLICATION_CREDENTIAL` is a backend-only secret (never sent to a browser, never logged, no default) configured the same way as `GAIT_AUTH_URL`. See `auth_integration/docs/AuthIntegration_Application_Identity.md` for the full contract: the wire format (`POST {GAIT_AUTH_URL}/applications/verify/`, credential sent via a dedicated `Gait-Application-Credential` header — never `Authorization: Bearer`), the failure semantics, and why organization/environment authority belongs to Gait alone. No Django/FastAPI request wiring exists for this yet, and no `SecurityContext` composing the two identities exists yet either — both are deliberately out of scope for this milestone.
+`GAIT_APPLICATION_CREDENTIAL` is a backend-only secret (never sent to a browser, never logged, no default) configured the same way as `GAIT_AUTH_URL`. See `auth_integration/docs/AuthIntegration_Application_Identity.md` for the full contract: the wire format (`POST {GAIT_AUTH_URL}/applications/verify/`, credential sent via a dedicated `Gait-Application-Credential` header — never `Authorization: Bearer`), the failure semantics, and why organization/environment authority belongs to Gait alone. No Django/FastAPI request wiring exists for this yet.
+
+---
+
+## SecurityContext — SDK3
+
+Once you've verified a human and/or an application identity, `SecurityContext` composes them into one immutable object — without merging, inferring, or authorizing anything:
+
+```python
+from auth_integration.context import SecurityContext
+
+SecurityContext(user=user)                          # human only
+SecurityContext(application=application)             # application only
+SecurityContext(user=user, application=application)  # both
+
+context.has_user          # bool — presence only, not a permission check
+context.has_application   # bool
+```
+
+`SecurityContext(...)` performs **no verification and no Gait network call** — it only accepts already-verified identities. Constructing one with neither `user` nor `application` raises `ValueError`: an identity-less context has no real use over simply not having one. See `auth_integration/docs/AuthIntegration_SecurityContext.md` for the full contract, including why `user` accepts both a `ClaimsUser` instance (Django) and a raw claims dict (FastAPI's `verify_token()` never builds a `ClaimsUser`), and why no Django/FastAPI request-integration helper was added yet.
 
 ---
 

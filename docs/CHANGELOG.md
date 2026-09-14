@@ -7,6 +7,24 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
+## [Unreleased] — SDK3: SecurityContext
+
+Not yet tagged/released. Additive only — no change to `ClaimsUser`,
+`ApplicationPrincipal`, `verify_token`, `verify_application`, or any
+existing public import path.
+
+### Added
+- `auth_integration.context.SecurityContext` — an immutable, framework-neutral composition of an already-verified human identity (`user`) and/or application identity (`application`). Performs no verification and no Gait network call; only accepts identities already verified elsewhere.
+- `SecurityContext.user` accepts either a real `ClaimsUser` instance (Django) or a raw claims dict (FastAPI's `verify_token()` never constructs a `ClaimsUser`) — checked structurally, never via `isinstance(user, ClaimsUser)`, because `ClaimsUser` currently lives in a module (`auth_integration.django.authentication`) that unconditionally imports Django/DRF; importing it for a runtime check would make `SecurityContext` require Django to import. `SecurityContext.application` is strictly `isinstance`-checked against `ApplicationPrincipal`, which has no such coupling.
+- `has_user` / `has_application` presence properties — identity-presence only, deliberately not named/shaped like an authorization check.
+- `auth_integration/docs/AuthIntegration_SecurityContext.md` — full contract, including the neither-identity rejection decision and why no Django/FastAPI request-integration helper was added this milestone.
+- `tests/test_context.py` (20 tests): user-only/application-only/both/neither states, immutability, exact-identity preservation, absence of cross-derived fields, no-network-on-construction, credential absence from repr, and type validation for malformed local input.
+
+### Design decisions (documented, not implemented as code changes)
+- `SecurityContext()` with neither `user` nor `application` raises `ValueError` — assessed against real usage and declined as a "meaningless context object" per this milestone's own stated default.
+- No Django (`request.security_context`) or FastAPI (`Depends(get_security_context)`) integration helper was added: neither framework currently has an established per-request source of `ApplicationPrincipal` (SDK2 didn't wire it in), so such a helper today could only build a human-only context automatically — not enough value over calling `SecurityContext(user=...)` directly, and it would risk implying request-lifecycle integration that doesn't exist yet.
+- No `.to_dict()`/serialization was added — no current consumer need identified.
+
 ## [Unreleased] — SDK2: Application Identity
 
 Not yet tagged/released. Additive only — no change to `ClaimsUser`, human
