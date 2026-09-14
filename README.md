@@ -254,6 +254,26 @@ context.has_application   # bool
 
 ---
 
+## Tenant security signals — SDK4
+
+Once your application identity is configured, it can report a narrow, approved security signal about itself — authenticated as software, no human identity involved:
+
+```python
+from auth_integration.security import send_security_signal, APPLICATION_SELF_CHECK
+
+result = await send_security_signal(
+    signal_type=APPLICATION_SELF_CHECK,
+    result="PASS",                       # or "FAIL" / "WARNING" / "INFORMATIONAL"
+    source_reference="nightly-check-2026-09-13",  # your own idempotency key — required
+    payload={"scanner": "internal-tool"},         # optional, bounded, data only
+)
+# result.signal_id / .control_key / .evidence_id / .received_at
+```
+
+This is a customer-originated claim, recorded by Gait as `CUSTOMER_REPORTED` evidence — never independently verified, no matter what you send. There is no `organization`/`environment`/`application`/`scope`/`trust` parameter anywhere on this function; those are always derived from your verified `ApplicationCredential` on Gait's side, never from caller input. Retrying the same `(signal_type, source_reference)` is a safe no-op — Gait's own idempotency, not this SDK's. See `auth_integration/docs/AuthIntegration_TenantSecuritySignals.md` for the full contract, failure semantics, and what this deliberately does *not* do (no findings/evidence retrieval, no automatic instrumentation).
+
+---
+
 ## Authorization (RBAC) guidance
 
 `auth_integration` intentionally focuses on **authentication** (who you are). Your services implement **authorization** (what you can do).

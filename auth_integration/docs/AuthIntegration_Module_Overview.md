@@ -46,6 +46,7 @@ flowchart TD
 | `authentication.py` (top-level) | Stable public re-export of `django/authentication.py`'s `ExternalJWTAuthentication` — import from here, not the internal path | Django |
 | `application.py` (SDK2) | `ApplicationPrincipal` + `verify_application()` — machine/software identity, verified against Gait's `/applications/verify/`. Framework-agnostic; see `AuthIntegration_Application_Identity.md` | All |
 | `context.py` (SDK3) | `SecurityContext` — composes an already-verified human identity and/or `ApplicationPrincipal`. No verification, no I/O, framework-agnostic; see `AuthIntegration_SecurityContext.md` | All |
+| `security.py` (SDK4) | `send_security_signal()` + `SecuritySignalResult` — customer-originated tenant security signal submission against Gait's `/security/tenant-signals/`, authenticated as an application. Framework-agnostic; see `AuthIntegration_TenantSecuritySignals.md` | All |
 
 ---
 

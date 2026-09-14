@@ -59,3 +59,31 @@ class InvalidApplicationCredentialError(APIException):
     status_code = 401
     default_detail = "Invalid application credential."
     default_code = "invalid_application_credential"
+
+
+class SecuritySignalRejected(APIException):
+    """Raised when a tenant security signal is malformed or unapproved.
+
+    Covers every content-rejection reason for `auth_integration.security.
+    send_security_signal` — unknown/unapproved `signal_type`, invalid
+    `result`, missing/invalid `source_reference`, or an oversized/invalid
+    `payload` — as a single exception, deliberately. This mirrors Gait's
+    own backend behavior: its `TenantSignalRejected` (security/
+    tenant_ingestion.py) is documented as "a single exception type for
+    every rejection reason... never a reason-specific status that could
+    help an attacker enumerate what a valid signal looks like." This SDK
+    exception is raised both for that same 400 response and for local
+    pre-flight validation (e.g. an empty `signal_type`) that never reaches
+    the network at all — a caller should not need to distinguish "you
+    typed something Gait rejected" from "you typed something so malformed
+    the SDK didn't even try."
+
+    Deliberately separate from `InvalidApplicationCredentialError`
+    (identity failure) and `AuthServiceUnavailable` (Gait couldn't be
+    reached or trusted) — a caller catching this specifically knows the
+    problem is with the *signal content*, not the credential or the
+    service.
+    """
+    status_code = 400
+    default_detail = "Invalid tenant security signal."
+    default_code = "security_signal_rejected"

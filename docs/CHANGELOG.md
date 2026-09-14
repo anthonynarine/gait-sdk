@@ -7,6 +7,24 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
+## [Unreleased] — SDK4: Tenant Security Signal Client
+
+Not yet tagged/released. Additive only — no change to `ClaimsUser`,
+`ApplicationPrincipal`, `verify_application`, `SecurityContext`, or any
+existing public import path.
+
+### Added
+- `auth_integration.security.send_security_signal(*, signal_type, result, source_reference, payload=None, credential=None) -> SecuritySignalResult` — submits a customer-originated tenant security signal to Gait's `POST {GAIT_AUTH_URL}/security/tenant-signals/`, authenticated as an application via the same `Gait-Application-Credential` header and `GAIT_APPLICATION_CREDENTIAL` setting SDK2 established. No second credential concept was introduced.
+- `auth_integration.security.SecuritySignalResult` — immutable receipt (`signal_id`, `control_key`, `evidence_id`, `received_at`) mirroring exactly what Gait's response contains; no invented "duplicate"/"idempotent" field, since Gait's own response doesn't distinguish a fresh signal from an idempotent replay.
+- New `auth_integration.exceptions.SecuritySignalRejected` (400) — a single exception for every signal-content rejection reason (local malformed input or Gait's own 400), mirroring the backend's own deliberately-singular `TenantSignalRejected`.
+- `signal_type`/`result` stay plain `str` parameters, not an SDK-side enum — Gait's own `tenant_signal_registry.py` is an explicitly growable, code-reviewed backend structure; hardcoding its contents into the SDK would create version drift for no safety benefit, since unapproved values are already rejected server-side. One convenience constant, `APPLICATION_SELF_CHECK`, is exported for the one currently-known approved value (documented as non-exhaustive).
+- `auth_integration/docs/AuthIntegration_TenantSecuritySignals.md` — full contract in founder/developer-readable language: what a signal is/isn't, `CUSTOMER_REPORTED` trust semantics, idempotency via `source_reference`, allowed vs. forbidden fields, and failure behavior.
+- `tests/test_security_signal.py` (44 tests): exact endpoint/header, valid/invalid/missing credential, unknown signal type, local input validation, timeout/network/malformed-response failure paths, credential/payload absence from logs and errors, a structural authority-injection proof (via `inspect.signature`) that none of Gait's own forbidden field names — `organization`, `scope`, `trust`, `control_key`, and 15 others, mirroring the backend's own strict-contract test matrix almost exactly — exist as parameters, idempotent-retry behavior (SDK never deduplicates locally, always forwards to Gait), and human-identity independence in both directions.
+
+### Notes
+- No Django/FastAPI wiring, no `SecurityContext` integration, no Observatory/findings client, and no automatic instrumentation were added — all deliberately out of scope for this milestone.
+- The frozen backend contract for this milestone (`security/tenant_ingestion.py`, `tenant_signal_registry.py`, `models.py::TenantSecuritySignal`, `serializers.py`, `views.py`, and both `test_tenant_ingestion*.py` files) was inspected read-only in the Gait backend's `b-tenant1/tenant-boundary` line (tip `08a06b6`, the same commit the original SDK discovery brief named as the frozen tenancy baseline) — not guessed from this milestone's own prompt, which used slightly different terminology (`SELF_REPORTED` vs. the actual `CUSTOMER_REPORTED`) corrected here to match the real backend.
+
 ## [Unreleased] — SDK3: SecurityContext
 
 Not yet tagged/released. Additive only — no change to `ClaimsUser`,
