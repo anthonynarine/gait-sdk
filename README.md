@@ -150,6 +150,50 @@ Set in your service's environment (`auth_integration.settings` reads these):
 |---|---|
 | `GAIT_AUTH_URL` | Base URL of the Auth API, e.g. `https://.../api` |
 | `GAIT_TIMEOUT` | HTTP timeout in seconds (default `5`) |
+| `GAIT_TOKEN_VERIFIER` | `introspection` (default) or `jwks`. Chosen explicitly; there is no automatic fallback between them. |
+| `GAIT_JWKS_URL` | Required for `jwks`. Gait's JWKS, e.g. `https://<gait>/.well-known/jwks.json`. Must be https (http only for localhost). |
+| `GAIT_ISSUER` | Required for `jwks`. Must equal Gait's `JWT_ISSUER`. |
+| `GAIT_AUDIENCE` | Required for `jwks`. Must equal Gait's `JWT_AUDIENCE`, e.g. `urn:gait:lumen`. |
+
+With `jwks`, a missing `GAIT_JWKS_URL`/`GAIT_ISSUER`/`GAIT_AUDIENCE` stops the service at startup: the Django `AppConfig` raises it, and FastAPI apps should call `auth_integration.fastapi.dependencies.validate_configuration()` on startup.
+
+---
+
+## Token verification modes (0.4.0)
+
+**Boundary.** Gait authenticates. `auth_integration` verifies and normalizes the identity. Your service authorizes. The package never grants, checks, or carries roles, organizations, facilities, or permissions.
+
+| | `introspection` (default, legacy) | `jwks` |
+|---|---|---|
+| How | Calls Gait `/whoami/` for each request (45 s bearer cache in Django) | Verifies the RS256 access token locally against Gait's published JWKS |
+| Network per request | Yes | No. The JWKS is fetched roughly every 5 minutes. |
+| Result | `VerifiedIdentity` plus the legacy `/whoami/` fields | `VerifiedIdentity` (`subject`, `email`, `session_id`, `token_id`, `issuer`) |
+| `ClaimsUser.role` | Gait's legacy role | **Always `""`.** Gait's RS256 contract carries no role. |
+| Revocation | Immediate (every request is live) | Only at token expiry (15 min), unless you use the live session check below |
+
+Under `jwks`, `request.verified_identity` (Django) and `request.state.verified_identity` (FastAPI) hold the `VerifiedIdentity`. Key identity on `(issuer, subject)`, and treat `subject` as an opaque string. What the JWKS verifier enforces:
+- RS256 only.
+- `iss`, `aud`, `exp`, `iat`, `sub`, `sid`, `jti`, and `token_use == "access"` are all required.
+- 30 s clock-skew leeway.
+
+JWKS cache behavior:
+- **Known `kid`, fresh keys:** verified locally.
+- **Unknown `kid`:** one single-flight forced refresh, at most one per 30 s. During that cooldown an unknown `kid` fails immediately.
+- **A successful refresh that drops a `kid`:** that key is invalid immediately.
+- **Refresh fails (network, 5xx, malformed or duplicate-`kid` JWKS):** a *known* key keeps verifying for up to 1 hour after the last successful fetch. An unknown `kid` fails closed (503).
+- **JWKS verification failure:** never downgrades to `/whoami/`.
+
+**Live session check (hybrid revocation).** For operations your service decides are sensitive, confirm the session with Gait live, after your own authorization check:
+
+```python
+from auth_integration.django.authentication import require_live_session
+
+def post(self, request, pk):
+    ...  # your authorization first
+    require_live_session(request)  # 401 revoked/expired, 503 Gait unreachable
+```
+
+In FastAPI, use `Depends(auth_integration.fastapi.dependencies.require_live_session)`. It is always a live `/whoami/` call: no bearer cache, no JWKS cache, no fallback, and it never fails open. See `auth_integration/docs/AuthIntegration_Verification.md`.
 
 ---
 
@@ -279,7 +323,9 @@ This is a customer-originated claim, recorded by Gait as `CUSTOMER_REPORTED` evi
 `auth_integration` intentionally focuses on **authentication** (who you are). Your services implement **authorization** (what you can do).
 
 - `auth_integration`: validates credentials, returns `ClaimsUser`, attaches `request.user_claims`.
-- Your service (e.g. `lumen_reports`): defines the actual permission rules — role checks, object-level checks, tenant-membership checks. See `auth_integration.permissions.HasRole` / `HasAnyRole` for simple role gating, or build your own (Lumen's `organizations.permissions.IsOrgMember` is a real example of a service-specific permission built on top of this package's claims).
+- Your service (e.g. `lumen_reports`): defines the actual permission rules — role checks, object-level checks, tenant-membership checks — from its own data (Lumen's `organizations.permissions.IsOrgMember` + `OrganizationMember.role` is the real example).
+
+**Deprecated (0.4.0), scheduled for removal:** `permissions.HasRole` / `HasAnyRole` / `require_role` and `utils.get_user_role` / `is_admin` / `is_physician` / `is_technologist`. They authorize on Gait's legacy `role` claim, which Gait's RS256 contract no longer carries. Under `jwks` the role is always `""`, so they always deny. They now emit `DeprecationWarning`. Do not add new uses.
 
 This keeps the shared library lightweight and undomained — it never needs to know about exams, organizations, or any other business concept.
 

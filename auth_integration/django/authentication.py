@@ -51,8 +51,14 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import APIException, AuthenticationFailed
 
 from auth_integration.client import validate_token  # async validator
-from auth_integration.exceptions import AuthServiceUnavailable, InvalidTokenError
+from auth_integration.exceptions import AuthConfigurationError, AuthServiceUnavailable, InvalidTokenError
+from auth_integration.session import check_session_live
 from auth_integration.settings import GAIT_AUTH_URL, GAIT_TIMEOUT
+from auth_integration.verification import (
+    VERIFIER_INTROSPECTION,
+    get_token_verifier,
+    identity_from_whoami,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -96,7 +102,10 @@ class ClaimsUser:
 
     id: str
     email: str
-    # Opaque, consuming-application-defined role string — see BaseUserClaims.role.
+    # LEGACY. Populated only on the introspection path (Gait /whoami/'s role
+    # field). Always "" under JWKS verification: Gait's RS256 contract carries
+    # no role, and authorization belongs to the consuming application. Do not
+    # authorize on this field.
     role: str
     first_name: str
     last_name: str
@@ -114,7 +123,7 @@ class ClaimsUser:
 
     def __str__(self) -> str:
         label = self.email or self.id
-        return f"{label} ({self.role})"
+        return f"{label} ({self.role})" if self.role else label
 
 
 # -----------------------------------------------------------------------------
@@ -297,6 +306,17 @@ class ExternalJWTAuthentication(BaseAuthentication):
     """
 
     def authenticate(self, request):
+        # Step 0: Explicitly configured verifier (GAIT_TOKEN_VERIFIER). No
+        # automatic fallback between verifiers in either direction.
+        try:
+            verifier = get_token_verifier()
+        except AuthConfigurationError as e:
+            logger.error("auth_integration misconfigured: %s", e)
+            raise AuthenticationServiceUnavailable("Authentication service misconfigured.")
+        if verifier.name != VERIFIER_INTROSPECTION:
+            return self._authenticate_local(request, verifier)
+
+        # --- Legacy introspection path (unchanged behavior) -------------------
         # Step 1: Try Authorization Bearer (DEV fallback)
         token = _extract_bearer_token(request)
 
@@ -344,6 +364,7 @@ class ExternalJWTAuthentication(BaseAuthentication):
 
         # Step 9: Attach claims & return authenticated ClaimsUser
         request.user_claims = claims
+        request.verified_identity = identity_from_whoami(claims)
         user = ClaimsUser(
             id=claims["id"],
             email=claims["email"],
@@ -353,6 +374,46 @@ class ExternalJWTAuthentication(BaseAuthentication):
         )
 
         # Step 10: Put claims in request.auth (more useful than returning the raw token)
+        return (user, claims)
+
+    def _authenticate_local(self, request, verifier):
+        """JWKS (local) verification path.
+
+        Reads the Bearer token, or the `access_token` cookie when no Bearer
+        header is present. Only the access token is considered -- refresh and
+        temp cookies are never forwarded or verified here. No /whoami/ call,
+        no bearer cache (local verification is already cheap), and a failure
+        never downgrades to introspection.
+
+        The resulting ClaimsUser has role/first_name/last_name == "": Gait's
+        RS256 contract is identity-only, and authorization belongs to the
+        consuming application (see VerifiedIdentity).
+        """
+        token = _extract_bearer_token(request) or (getattr(request, "COOKIES", None) or {}).get("access_token")
+        if not token:
+            return None
+
+        try:
+            verify = getattr(verifier, "verify", None)
+            identity = verify(token) if callable(verify) else async_to_sync(verifier.averify)(token)
+        except InvalidTokenError as e:
+            raise AuthenticationFailed(str(e))
+        except AuthServiceUnavailable as e:
+            raise AuthenticationServiceUnavailable(str(e))
+        except Exception as e:
+            logger.error("Unexpected error during local token verification: %s", e.__class__.__name__)
+            raise AuthenticationFailed("Authentication error.")
+
+        claims = identity.as_claims()
+        request.user_claims = claims
+        request.verified_identity = identity
+        user = ClaimsUser(
+            id=identity.subject,
+            email=identity.email,
+            role="",
+            first_name="",
+            last_name="",
+        )
         return (user, claims)
 
     def authenticate_header(self, request):
@@ -371,3 +432,29 @@ class ExternalJWTAuthentication(BaseAuthentication):
         a real 401 challenge, so it stops downgrading the status code.
         """
         return "Bearer"
+
+
+# -----------------------------------------------------------------------------
+# Live session check for sensitive operations (hybrid revocation)
+# -----------------------------------------------------------------------------
+def require_live_session(request) -> None:
+    """Deny unless Gait confirms, live, that this request's session is active.
+
+    Call from a view AFTER authentication and AFTER the application's own
+    authorization check, for the operations the application has decided are
+    sensitive. Which operations those are is the application's decision.
+
+    Raises DRF AuthenticationFailed (401) if the session is revoked/expired
+    or the request carries no token, and AuthenticationServiceUnavailable
+    (503) if Gait cannot confirm it. Never uses any cache and never fails open.
+    """
+    token = _extract_bearer_token(request) or (getattr(request, "COOKIES", None) or {}).get("access_token")
+    identity = getattr(request, "verified_identity", None)
+    if not token or identity is None:
+        raise AuthenticationFailed("Session is not active.")
+    try:
+        check_session_live(token, expected_subject=identity.subject)
+    except InvalidTokenError as e:
+        raise AuthenticationFailed(str(e))
+    except AuthServiceUnavailable as e:
+        raise AuthenticationServiceUnavailable(str(e))

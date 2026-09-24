@@ -12,10 +12,23 @@ Django-less environment, e.g. a FastAPI-only install of this package.
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - type-checking only, no runtime import
     from django.http import HttpRequest
+
+
+def _warn_legacy_role(name: str) -> None:
+    # 0.4.0: role helpers are deprecated. Gait's RS256 contract carries no
+    # role (under GAIT_TOKEN_VERIFIER=jwks the role claim is always ""), and
+    # authorization belongs to the consuming application.
+    warnings.warn(
+        f"auth_integration.utils.{name} is deprecated and will be removed. "
+        "Authorization belongs to the consuming application, not Gait's legacy role claim.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def get_user_claims(request: HttpRequest) -> dict:
@@ -27,9 +40,11 @@ def get_user_claims(request: HttpRequest) -> dict:
     return getattr(request, "user_claims", {})
 
 
-def get_user_id(request: HttpRequest) -> Optional[int]:
+def get_user_id(request: HttpRequest) -> Optional[str]:
     """
-    Returns the user's ID from the claims, or None if not present.
+    Returns the user's ID (the opaque subject string) from the claims, or None.
+
+    Treat it as an opaque string: do not parse it or assume it is numeric.
     """
     return get_user_claims(request).get("id")
 
@@ -41,6 +56,7 @@ def get_user_role(request: HttpRequest) -> Optional[str]:
     uses 'admin' / 'physician' / 'technologist', but a different consuming
     application may use entirely different values).
     """
+    _warn_legacy_role("get_user_role")
     return get_user_claims(request).get("role")
 
 
@@ -58,7 +74,8 @@ def is_admin(request: HttpRequest) -> bool:
 
     Compatibility helper for Lumen's role vocabulary — see module note above.
     """
-    return get_user_role(request) == "admin"
+    _warn_legacy_role("is_admin")
+    return get_user_claims(request).get("role") == "admin"
 
 
 def is_physician(request: HttpRequest) -> bool:
@@ -67,7 +84,8 @@ def is_physician(request: HttpRequest) -> bool:
 
     Compatibility helper for Lumen's role vocabulary — see module note above.
     """
-    return get_user_role(request) == "physician"
+    _warn_legacy_role("is_physician")
+    return get_user_claims(request).get("role") == "physician"
 
 def is_technologist(request: HttpRequest) -> bool:
     """
@@ -75,4 +93,5 @@ def is_technologist(request: HttpRequest) -> bool:
 
     Compatibility helper for Lumen's role vocabulary — see module note above.
     """
-    return get_user_role(request) == "technologist"
+    _warn_legacy_role("is_technologist")
+    return get_user_claims(request).get("role") == "technologist"

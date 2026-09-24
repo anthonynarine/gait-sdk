@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auth_integration"
-version = "0.3.12"
+version = "0.4.0"
 description = "Reusable authentication and permissions package for Django + FastAPI projects using an external Auth API (Gait)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -32,7 +32,11 @@ dependencies = [
     # removal in a later milestone once confirmed no consumer depends on the
     # transitive install.
     "requests >=2.31.0",
-    "PyJWT >=2.10.1",
+
+    # 0.4.0: PyJWT is now used directly by auth_integration.verification
+    # (local RS256 verification against Gait's JWKS). The [crypto] extra
+    # pulls in `cryptography`, which PyJWT needs for RS256.
+    "PyJWT[crypto] >=2.10.1",
 ]
 
 [project.optional-dependencies]

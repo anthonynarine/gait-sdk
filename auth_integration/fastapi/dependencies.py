@@ -32,7 +32,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_503_SERVICE_UNAVAILABLE
 
 from auth_integration.client import validate_token
-from auth_integration.exceptions import InvalidTokenError, AuthServiceUnavailable
+from auth_integration.exceptions import AuthConfigurationError, InvalidTokenError, AuthServiceUnavailable
+from auth_integration.session import acheck_session_live
+from auth_integration.verification import VERIFIER_INTROSPECTION, get_token_verifier, load_verifier_config
 
 # Advertised on every 401 response, mirroring the Django adapter's
 # authenticate_header() contract (see django/authentication.py). FastAPI has
@@ -101,6 +103,15 @@ async def verify_token(
 
     token = credentials.credentials
 
+    # Explicitly configured verifier (GAIT_TOKEN_VERIFIER); no fallback between them.
+    try:
+        verifier = get_token_verifier()
+    except AuthConfigurationError as e:
+        logger.error(f"auth_integration misconfigured: {e}")
+        raise HTTPException(status_code=HTTP_503_SERVICE_UNAVAILABLE, detail="Authentication service unavailable.")
+    if verifier.name != VERIFIER_INTROSPECTION:
+        return await _verify_local(request, verifier, token)
+
     try:
         logger.info("Validating Bearer token via Gait Auth API.")
         user_claims = await validate_token(token)
@@ -131,6 +142,63 @@ async def verify_token(
             detail="Authentication error.",
             headers=_WWW_AUTHENTICATE_BEARER,
         )
+
+
+async def _verify_local(request: Request, verifier, token: str) -> dict:
+    """JWKS (local) verification: same core as the Django adapter, no /whoami/.
+
+    Returns the identity dict (VerifiedIdentity.as_claims()): role,
+    first_name and last_name are always "" -- Gait's RS256 contract is
+    identity-only. A failure never downgrades to introspection.
+    """
+    try:
+        identity = await verifier.averify(token)
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+            headers=_WWW_AUTHENTICATE_BEARER,
+        )
+    except AuthServiceUnavailable:
+        raise HTTPException(status_code=HTTP_503_SERVICE_UNAVAILABLE, detail="Authentication service unavailable.")
+    except Exception as e:
+        logger.error(f"Unexpected error during local token verification: {e.__class__.__name__}")
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Authentication error.",
+            headers=_WWW_AUTHENTICATE_BEARER,
+        )
+    claims = identity.as_claims()
+    request.state.user = claims
+    request.state.verified_identity = identity
+    return claims
+
+
+async def require_live_session(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    claims: dict = Depends(verify_token),
+) -> dict:
+    """Dependency for sensitive routes: verify the token, then confirm the
+    session with Gait LIVE (no cache, no fallback). 401 if revoked/expired,
+    503 if Gait cannot confirm. Which routes need this is the application's
+    decision."""
+    try:
+        await acheck_session_live(credentials.credentials, expected_subject=claims.get("id"))
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Session is not active.",
+            headers=_WWW_AUTHENTICATE_BEARER,
+        )
+    except AuthServiceUnavailable:
+        raise HTTPException(status_code=HTTP_503_SERVICE_UNAVAILABLE, detail="Unable to confirm session.")
+    return claims
+
+
+def validate_configuration() -> None:
+    """Call at FastAPI startup: raises AuthConfigurationError on a bad verifier config."""
+    load_verifier_config()
 
 
 # -----------------------------------------------------------------------------

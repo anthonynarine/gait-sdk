@@ -44,6 +44,17 @@ class InvalidTokenError(APIException):
     default_code = "invalid_token"
 
 
+class AuthConfigurationError(Exception):
+    """Raised when auth_integration is misconfigured (e.g. GAIT_TOKEN_VERIFIER=jwks
+    without GAIT_JWKS_URL/GAIT_ISSUER/GAIT_AUDIENCE).
+
+    Deliberately NOT an APIException: this is a deployment error that should
+    stop the service at startup (the Django AppConfig and FastAPI
+    `validate_configuration()` raise it), not a per-request auth outcome. If
+    it does surface during a request, the adapters report it as 503.
+    """
+
+
 class InvalidApplicationCredentialError(APIException):
     """Raised when a Gait ApplicationCredential (machine identity) is missing or rejected.
 

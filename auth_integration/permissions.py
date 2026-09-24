@@ -165,3 +165,50 @@ except ImportError:
             if not isinstance(claims, dict):
                 return False
             return claims.get("role") in self.allowed_roles
+
+
+# ------------------------------------------------------------
+# Deprecation (0.4.0): scheduled for removal
+# ------------------------------------------------------------
+# auth_integration verifies and normalizes identity; the consuming
+# application owns authorization. These helpers authorize on Gait's legacy
+# `role` claim, which Gait's RS256 contract no longer carries -- under
+# GAIT_TOKEN_VERIFIER=jwks, `role` is always "" and every check here
+# denies. Behavior is otherwise unchanged (still fail-closed); they now
+# warn on use and will be removed once no consumer depends on them.
+import functools as _functools
+import warnings as _warnings
+
+_ROLE_HELPER_DEPRECATION = (
+    "auth_integration.permissions.{name} is deprecated and will be removed. "
+    "Authorization belongs to the consuming application (e.g. Lumen's "
+    "OrganizationMember role), not to Gait's legacy role claim."
+)
+
+
+def _warn_role_helper(name: str) -> None:
+    _warnings.warn(_ROLE_HELPER_DEPRECATION.format(name=name), DeprecationWarning, stacklevel=3)
+
+
+def _deprecate_init(cls):
+    original_init = cls.__init__
+
+    @_functools.wraps(original_init)
+    def __init__(self, *args, **kwargs):
+        _warn_role_helper(cls.__name__)
+        original_init(self, *args, **kwargs)
+
+    cls.__init__ = __init__
+    return cls
+
+
+_deprecate_init(HasRole)
+_deprecate_init(HasAnyRole)
+
+_require_role_impl = require_role
+
+
+@_functools.wraps(_require_role_impl)
+def require_role(role: str):
+    _warn_role_helper("require_role")
+    return _require_role_impl(role)
