@@ -258,11 +258,11 @@ async def send_security_signal(
 
     raw_credential = credential if credential is not None else GAIT_APPLICATION_CREDENTIAL
     if not raw_credential:
-        logger.error("No application credential configured or provided — cannot submit signal.")
+        logger.error("No application credential configured or provided - cannot submit signal.")
         raise InvalidApplicationCredentialError("Application credential is not configured.")
 
     if not GAIT_AUTH_URL:
-        logger.error("Missing GAIT_AUTH_URL — cannot submit security signal.")
+        logger.error("Missing GAIT_AUTH_URL - cannot submit security signal.")
         raise AuthServiceUnavailable("Authentication service misconfigured.")
 
     url = f"{GAIT_AUTH_URL.rstrip('/')}/security/tenant-signals/"

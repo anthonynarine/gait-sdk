@@ -85,7 +85,7 @@ async def validate_token(token: str) -> Dict[str, Any]:
     """
     # Step 1: Validate configuration
     if not GAIT_AUTH_URL:
-        logger.error("Missing GAIT_AUTH_URL — cannot validate token.")
+        logger.error("Missing GAIT_AUTH_URL - cannot validate token.")
         raise AuthServiceUnavailable("Authentication service misconfigured.")
 
     url = f"{GAIT_AUTH_URL.rstrip('/')}/whoami/"

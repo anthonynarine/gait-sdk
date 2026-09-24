@@ -185,11 +185,11 @@ async def verify_application(credential: Optional[str] = None) -> ApplicationPri
     # never a silently manufactured or fallback identity.
     raw_credential = credential if credential is not None else GAIT_APPLICATION_CREDENTIAL
     if not raw_credential:
-        logger.error("No application credential configured or provided — cannot verify.")
+        logger.error("No application credential configured or provided - cannot verify.")
         raise InvalidApplicationCredentialError("Application credential is not configured.")
 
     if not GAIT_AUTH_URL:
-        logger.error("Missing GAIT_AUTH_URL — cannot verify application identity.")
+        logger.error("Missing GAIT_AUTH_URL - cannot verify application identity.")
         raise AuthServiceUnavailable("Authentication service misconfigured.")
 
     url = f"{GAIT_AUTH_URL.rstrip('/')}/applications/verify/"

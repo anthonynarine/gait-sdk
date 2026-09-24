@@ -106,10 +106,10 @@ GAIT_APPLICATION_CREDENTIAL: Optional[str] = _get_setting("GAIT_APPLICATION_CRED
 # -----------------------------------------------------------------------------
 if not GAIT_AUTH_URL:
     logger.warning(
-        "⚠️ GAIT_AUTH_URL is not set! Token validation will fail until configured.\n"
+        "GAIT_AUTH_URL is not set! Token validation will fail until configured.\n"
         "Set GAIT_AUTH_URL in Django settings or your .env file."
     )
 else:
     parsed = urlparse(GAIT_AUTH_URL)
     domain = parsed.netloc or GAIT_AUTH_URL
-    logger.info("✅ GAIT_AUTH_URL loaded successfully (domain only shown): %s", domain)
+    logger.info("GAIT_AUTH_URL loaded successfully (domain only shown): %s", domain)

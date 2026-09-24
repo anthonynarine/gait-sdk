@@ -255,7 +255,7 @@ async def _validate_with_cookies(cookies: dict) -> UserClaims:
         AuthServiceUnavailable: If Gait is unreachable or misconfigured.
     """
     if not GAIT_AUTH_URL:
-        logger.error("Missing GAIT_AUTH_URL — cannot validate cookies.")
+        logger.error("Missing GAIT_AUTH_URL - cannot validate cookies.")
         raise AuthServiceUnavailable("Authentication service misconfigured.")
 
     url = f"{GAIT_AUTH_URL.rstrip('/')}/whoami/"
@@ -317,14 +317,14 @@ class ExternalJWTAuthentication(BaseAuthentication):
                     claims = cached
                 else:
                     logger.info(
-                        "Bearer token detected — validating via shared async client."
+                        "Bearer token detected - validating via shared async client."
                     )
                     raw_claims = async_to_sync(validate_token)(token)
                     claims = _validate_claims_shape(raw_claims)
                     _cache_set(token, claims)
             else:
                 # Step 5: Cookie mode (PROD with HttpOnly cookies)
-                logger.info("No Bearer token — attempting cookie-based validation.")
+                logger.info("No Bearer token - attempting cookie-based validation.")
                 claims = async_to_sync(_validate_with_cookies)(auth_cookies)
 
         except InvalidTokenError as e:

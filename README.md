@@ -285,6 +285,8 @@ This keeps the shared library lightweight and undomained — it never needs to k
 
 **Fail-closed guarantee.** `HasRole`, `HasAnyRole`, and `require_role` never silently grant access just because a framework-specific implementation is unavailable. Under DRF they're real `BasePermission` subclasses. In a DRF-less (FastAPI-style) environment, `HasRole`/`HasAnyRole` are called directly against a verified claims dict (`checker.has_permission(claims)` — not wired into any FastAPI dependency-injection mechanism, since FastAPI has no `permission_classes` equivalent) and `require_role` is a decorator expecting the wrapped route to receive its claims via a `claims=Depends(verify_token)` keyword argument. In every case — missing claims, non-dict claims, or a role mismatch — the result is **deny**, never an accidental pass-through. See `auth_integration/docs/permissions.md` for the full contract.
 
+See `auth_integration/docs/AuthIntegration_Identity_and_Tenancy_Boundaries.md` for the recorded decision on how this stays true even as Gait grows into a multi-application SaaS identity provider — user identity, application/customer identity, and organization membership are three separate axes, and only the first belongs in this package's contract today.
+
 ---
 
 ## Error behavior
