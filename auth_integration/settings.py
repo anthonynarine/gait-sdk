@@ -23,10 +23,21 @@ Teaching Notes:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 from urllib.parse import urlparse
 
-from decouple import config
+from decouple import AutoConfig
+
+# A PRIVATE decouple instance, deliberately not `decouple.config`. The global
+# `decouple.config` is a process-wide AutoConfig that locates its .env from
+# the directory of whoever calls it FIRST and then caches that forever. When
+# this package was imported before the host app had read any setting, the
+# global instance latched onto this package's install directory (e.g.
+# site-packages), found no .env, and the host app's own later
+# `config("DATABASE_URL")` then failed. Using our own instance, rooted at the
+# process working directory, leaves the host app's decouple state untouched.
+config = AutoConfig(search_path=os.getcwd())
 
 # Step X: Backwards-compatible flag for existing tests and callers.
 
