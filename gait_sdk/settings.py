@@ -122,5 +122,5 @@ if not GAIT_AUTH_URL:
     )
 else:
     parsed = urlparse(GAIT_AUTH_URL)
-    domain = parsed.netloc or GAIT_AUTH_URL
-    logger.info("GAIT_AUTH_URL loaded successfully (domain only shown): %s", domain)
+    # hostname only: netloc would include any user:password@ embedded in the URL.
+    logger.info("GAIT_AUTH_URL loaded (host only shown): %s", parsed.hostname or "<unparseable>")

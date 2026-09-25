@@ -86,13 +86,16 @@ def test_django_jwks_token_role_claim_never_reaches_claims_user(jwks_mode):
     assert user.role == ""
 
 
-def test_django_jwks_reads_access_token_cookie_only(jwks_mode, monkeypatch):
+def test_django_jwks_is_bearer_only_cookies_ignored(jwks_mode, monkeypatch):
+    # 0.5.0 (audit M2): JWKS mode never reads cookies, even when legacy cookie
+    # mode is enabled -- a cross-site page cannot attach an Authorization header,
+    # so Bearer-only removes the CSRF exposure entirely.
     _no_whoami(monkeypatch)
+    monkeypatch.setenv("GAIT_ALLOW_COOKIE_AUTH", "True")
     token = sign()
-    user, _ = ExternalJWTAuthentication().authenticate(DummyRequest(cookies={"access_token": token}))
+    assert ExternalJWTAuthentication().authenticate(DummyRequest(cookies={"access_token": token})) is None
+    user, _ = ExternalJWTAuthentication().authenticate(DummyRequest(headers={"Authorization": f"Bearer {token}"}))
     assert user.id == "123"
-    # refresh/temp cookies alone are not credentials in JWKS mode
-    assert ExternalJWTAuthentication().authenticate(DummyRequest(cookies={"refresh_token": token})) is None
 
 
 def test_django_jwks_no_credentials_is_anonymous(jwks_mode):

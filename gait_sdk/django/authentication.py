@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from typing import Optional, TypedDict, cast
@@ -67,10 +68,22 @@ from gait_sdk.verification import (
 logger = logging.getLogger("gait_sdk.django.authentication")
 
 # -----------------------------------------------------------------------------
-# 🍪 Cookie whitelist (must match Gait)
+# 🍪 Legacy cookie mode (DEPRECATED, off by default since 0.5.0)
 # -----------------------------------------------------------------------------
-# ✅ New Code: Only these cookies should trigger cookie-mode validation.
-AUTH_COOKIE_KEYS: set[str] = {"access_token", "refresh_token", "temp_token"}
+# Cookie-carried credentials are exposed to CSRF (the browser attaches them to
+# cross-site requests), and DRF only enforces CSRF inside SessionAuthentication.
+# Gait's browser flow is Bearer + in-memory access token, so cookie mode is
+# opt-in via GAIT_ALLOW_COOKIE_AUTH=True for the legacy introspection path only
+# (never under JWKS). When enabled, ONLY the access token is forwarded to
+# Gait -- never a refresh or 2FA temp token.
+AUTH_COOKIE_KEYS: set[str] = {"access_token"}
+
+
+def _cookie_auth_enabled() -> bool:
+    from gait_sdk.settings import _get_setting
+
+    value = _get_setting("GAIT_ALLOW_COOKIE_AUTH", "False")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 # -----------------------------------------------------------------------------
 # 🧩 Types
@@ -140,10 +153,15 @@ class AuthenticationServiceUnavailable(APIException):
 # -----------------------------------------------------------------------------
 # 🚀 Tiny in-process TTL cache for Bearer validations (speed win)
 # -----------------------------------------------------------------------------
-# Key: sha256(token), Value: (expires_at_epoch, claims_dict)
+# Legacy introspection path only (JWKS mode never uses it).
+# Key: sha256(token) -- raw tokens are never stored. Value: (expires_at, claims).
+# Trade-off, by design: a token revoked at Gait keeps passing here for up to
+# _BEARER_CACHE_TTL_SECONDS. Sensitive actions must use require_live_session(),
+# which bypasses this cache.
 _BEARER_CACHE: dict[str, tuple[float, UserClaims]] = {}
 _BEARER_CACHE_MAX = 2048
 _BEARER_CACHE_TTL_SECONDS = 45
+_BEARER_CACHE_LOCK = threading.Lock()  # worker threads share this dict
 
 
 def _hash_token(token: str) -> str:
@@ -152,32 +170,30 @@ def _hash_token(token: str) -> str:
 
 
 def _cache_get(token: str) -> Optional[UserClaims]:
-    """# Step 1: Return cached claims if present and not expired."""
+    """Return cached claims if present and not expired."""
     now = time.time()
     key = _hash_token(token)
-    item = _BEARER_CACHE.get(key)
-    if not item:
-        return None
-
-    expires_at, claims = item
-    if expires_at <= now:
-        _BEARER_CACHE.pop(key, None)
-        return None
-
-    return claims
+    with _BEARER_CACHE_LOCK:
+        item = _BEARER_CACHE.get(key)
+        if not item:
+            return None
+        expires_at, claims = item
+        if expires_at <= now:
+            _BEARER_CACHE.pop(key, None)
+            return None
+        return claims
 
 
 def _cache_set(token: str, claims: UserClaims) -> None:
-    """# Step 2: Store claims in cache with TTL; evict oldest opportunistically."""
+    """Store claims with a TTL; when full, evict the oldest-inserted entry."""
     if _BEARER_CACHE_MAX <= 0 or _BEARER_CACHE_TTL_SECONDS <= 0:
         return
-
-    if len(_BEARER_CACHE) >= _BEARER_CACHE_MAX:
-        # Evict one arbitrary item (simple + fast). For LRU, add dependency later.
-        _BEARER_CACHE.pop(next(iter(_BEARER_CACHE)), None)
-
     key = _hash_token(token)
-    _BEARER_CACHE[key] = (time.time() + _BEARER_CACHE_TTL_SECONDS, claims)
+    with _BEARER_CACHE_LOCK:
+        if len(_BEARER_CACHE) >= _BEARER_CACHE_MAX:
+            # dicts keep insertion order; iterating is safe while we hold the lock.
+            _BEARER_CACHE.pop(next(iter(_BEARER_CACHE)), None)
+        _BEARER_CACHE[key] = (time.time() + _BEARER_CACHE_TTL_SECONDS, claims)
 
 
 # -----------------------------------------------------------------------------
@@ -322,7 +338,8 @@ class ExternalJWTAuthentication(BaseAuthentication):
 
         # Step 2: Cookie-mode credentials exist only if auth cookies exist
         raw_cookies = getattr(request, "COOKIES", None) or {}
-        auth_cookies = _filter_auth_cookies(raw_cookies)
+        # Cookie mode is off unless explicitly enabled (see AUTH_COOKIE_KEYS).
+        auth_cookies = _filter_auth_cookies(raw_cookies) if _cookie_auth_enabled() else {}
         has_auth_cookies = bool(auth_cookies)
 
         # Step 3: No credentials (no Bearer and no auth cookies) -> DRF treats as anonymous
@@ -379,9 +396,9 @@ class ExternalJWTAuthentication(BaseAuthentication):
     def _authenticate_local(self, request, verifier):
         """JWKS (local) verification path.
 
-        Reads the Bearer token, or the `access_token` cookie when no Bearer
-        header is present. Only the access token is considered -- refresh and
-        temp cookies are never forwarded or verified here. No /whoami/ call,
+        Bearer header ONLY -- cookies are never read in JWKS mode, so there is
+        no CSRF exposure (a cross-site page cannot make the browser attach an
+        Authorization header). No /whoami/ call,
         no bearer cache (local verification is already cheap), and a failure
         never downgrades to introspection.
 
@@ -389,7 +406,8 @@ class ExternalJWTAuthentication(BaseAuthentication):
         RS256 contract is identity-only, and authorization belongs to the
         consuming application (see VerifiedIdentity).
         """
-        token = _extract_bearer_token(request) or (getattr(request, "COOKIES", None) or {}).get("access_token")
+        # Bearer only: JWKS mode never reads cookies (no CSRF exposure).
+        token = _extract_bearer_token(request)
         if not token:
             return None
 
@@ -448,7 +466,9 @@ def require_live_session(request) -> None:
     or the request carries no token, and AuthenticationServiceUnavailable
     (503) if Gait cannot confirm it. Never uses any cache and never fails open.
     """
-    token = _extract_bearer_token(request) or (getattr(request, "COOKIES", None) or {}).get("access_token")
+    token = _extract_bearer_token(request)
+    if not token and _cookie_auth_enabled():
+        token = (getattr(request, "COOKIES", None) or {}).get("access_token")
     identity = getattr(request, "verified_identity", None)
     if not token or identity is None:
         raise AuthenticationFailed("Session is not active.")

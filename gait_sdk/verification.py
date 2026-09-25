@@ -42,6 +42,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Optional, Protocol
+from urllib.parse import urlparse
 
 import httpx
 import jwt
@@ -63,6 +64,7 @@ ACCESS_TOKEN_USE = "access"
 ALLOWED_ALGORITHM = "RS256"  # hard-pinned; never read from config or the token
 REQUIRED_CLAIMS = ("exp", "iat", "sub", "iss", "aud", "jti", "sid", "token_use")
 MIN_RSA_KEY_BITS = 2048
+MAX_JWKS_KEYS = 20
 
 DEFAULT_JWKS_CACHE_SECONDS = 300  # fresh period
 DEFAULT_JWKS_STALE_MAX_SECONDS = 3600  # hard cap on stale-key use during a Gait outage
@@ -187,6 +189,10 @@ def parse_jwks(document: object) -> Dict[str, Any]:
     """
     if not isinstance(document, dict) or not isinstance(document.get("keys"), list):
         raise _JwksFetchFailed("JWKS document must be an object with a 'keys' list.")
+    if len(document["keys"]) > MAX_JWKS_KEYS:
+        # Gait publishes the active key plus a few retired ones; hundreds of
+        # entries means something is wrong (or hostile). Refuse the document.
+        raise _JwksFetchFailed(f"JWKS has more than {MAX_JWKS_KEYS} keys.")
 
     seen: set[str] = set()
     keys: Dict[str, Any] = {}
@@ -263,82 +269,126 @@ class JwksVerifier:
         self._fetch_document = fetch or _http_fetch_json
         self._clock = clock
 
+        # Concurrency model ("single-flight"):
+        # - _lock guards ONLY the small in-memory state below and is never held
+        #   during network I/O, so a slow or attacker-triggered JWKS fetch can
+        #   never stall verification of tokens whose key is already cached.
+        # - _inflight is the Event of the one fetch currently running (or None).
+        #   Other threads that need fresh keys wait on it instead of fetching.
         self._lock = threading.Lock()
         self._keys: Dict[str, Any] = {}
         self._fetched_at: Optional[float] = None  # last SUCCESSFUL fetch
         self._last_forced_refresh_at: Optional[float] = None
-        self._last_failed_at: Optional[float] = None  # backoff after a failed fetch
+        self._last_failed_at: Optional[float] = None  # set on failure, cleared on success
+        self._inflight: Optional[threading.Event] = None
         self.fetch_count = 0  # observable for tests/metrics
 
     # -- key management -------------------------------------------------------
-    def _refresh_locked(self) -> bool:
-        """Fetch and replace the key set. Caller holds the lock. True on success."""
-        self.fetch_count += 1
+    def _fetch_keys(self) -> Optional[Dict[str, Any]]:
+        """Download + parse the JWKS. NO shared state touched; call WITHOUT the lock.
+
+        Returns the parsed key set, or None on any failure (network, non-200,
+        oversized, malformed, duplicate kid).
+        """
         try:
             document = self._fetch_document(self.jwks_url, self.timeout)
-            keys = parse_jwks(document)
+            return parse_jwks(document)
         except _JwksFetchFailed as exc:
             logger.error("JWKS refresh rejected: %s", exc)
-            self._last_failed_at = self._clock()
-            return False
         except Exception as exc:  # network, JSON, anything else
             logger.error("JWKS refresh failed: %s", exc.__class__.__name__)
-            self._last_failed_at = self._clock()
-            return False
-        self._keys = keys
-        self._fetched_at = self._clock()
-        self._last_failed_at = None
-        return True
+        return None
 
     def _age(self) -> Optional[float]:
         return None if self._fetched_at is None else self._clock() - self._fetched_at
 
-    def _get_key(self, kid: str):
-        with self._lock:
-            age = self._age()
-            fresh = age is not None and age < self.cache_seconds
+    def _plan(self, kid: str):
+        """Decide what to do for `kid`. Caller holds the lock; never blocks.
 
-            if fresh:
-                key = self._keys.get(kid)
-                if key is not None:
-                    return key
-                # Unknown kid with a fresh set: one rate-limited forced refresh.
-                now = self._clock()
-                if (
-                    self._last_forced_refresh_at is not None
-                    and now - self._last_forced_refresh_at < self.refresh_cooldown_seconds
-                ):
-                    raise InvalidTokenError("Unknown signing key.")
-                self._last_forced_refresh_at = now
-                if self._refresh_locked():
-                    key = self._keys.get(kid)
-                    if key is None:
-                        raise InvalidTokenError("Unknown signing key.")
-                    return key
-                # Gait unreachable and kid unknown: fail closed.
-                raise AuthServiceUnavailable("Unable to refresh signing keys.")
+        Returns one of:
+          ("key", key)        -- cached key, use it
+          ("reject", None)    -- unknown kid during the forced-refresh cooldown
+          ("lead", event)     -- this thread must fetch, then set `event`
+          ("wait", event)     -- another thread is fetching; wait on `event`
+          ("settle", None)    -- no fetch (backing off after a failure); decide from cache
+        """
+        age = self._age()
+        fresh = age is not None and age < self.cache_seconds
+        now = self._clock()
 
-            # Expired (or never fetched): normal refresh -- unless a fetch just
-            # failed, in which case back off for the cooldown instead of making
-            # every request during a Gait outage wait on the network.
-            now = self._clock()
+        if fresh:
+            key = self._keys.get(kid)
+            if key is not None:
+                return "key", key
+            # Unknown kid with a fresh set: at most one forced refresh per cooldown,
+            # across all threads, so a stream of random kids cannot hammer Gait.
+            if (
+                self._last_forced_refresh_at is not None
+                and now - self._last_forced_refresh_at < self.refresh_cooldown_seconds
+            ):
+                return "reject", None
+            self._last_forced_refresh_at = now
+        else:
+            # Expired (or never fetched): refresh -- unless a fetch just failed, in
+            # which case back off instead of making every request wait on the network.
             backing_off = (
                 self._last_failed_at is not None
                 and now - self._last_failed_at < self.refresh_cooldown_seconds
             )
-            if not backing_off and self._refresh_locked():
-                key = self._keys.get(kid)
-                if key is None:
-                    raise InvalidTokenError("Unknown signing key.")
-                return key
+            if backing_off:
+                return "settle", None
 
-            # Refresh failed: bounded stale use of a KNOWN key only.
-            age = self._age()
-            key = self._keys.get(kid)
-            if key is not None and age is not None and age <= self.stale_max_seconds:
+        if self._inflight is not None:
+            return "wait", self._inflight
+        self._inflight = threading.Event()
+        self.fetch_count += 1
+        return "lead", self._inflight
+
+    def _settle(self, kid: str):
+        """Final decision from the cache after any fetch. Caller holds the lock."""
+        key = self._keys.get(kid)
+        age = self._age()
+        fresh = age is not None and age < self.cache_seconds
+        if key is not None:
+            if fresh:
+                return key
+            if age is not None and age <= self.stale_max_seconds:
+                # Only reachable when the refresh failed or we are backing off.
                 logger.warning("Verifying with stale JWKS (age %.0fs) during refresh failure.", age)
                 return key
             raise AuthServiceUnavailable("Signing keys unavailable.")
+        if self._last_failed_at is not None:
+            # Unknown kid and Gait could not be reached: fail closed as unavailable.
+            raise AuthServiceUnavailable("Unable to refresh signing keys.")
+        raise InvalidTokenError("Unknown signing key.")
+
+    def _get_key(self, kid: str):
+        with self._lock:
+            action, value = self._plan(kid)
+            if action == "key":
+                return value
+            if action == "reject":
+                raise InvalidTokenError("Unknown signing key.")
+
+        if action == "lead":
+            keys = self._fetch_keys()  # network I/O, lock NOT held
+            with self._lock:
+                if keys is not None:
+                    # A successful fetch REPLACES the set: a kid missing from it
+                    # is invalid immediately (emergency key removal).
+                    self._keys = keys
+                    self._fetched_at = self._clock()
+                    self._last_failed_at = None
+                else:
+                    self._last_failed_at = self._clock()
+                self._inflight = None
+            value.set()
+        elif action == "wait":
+            # Bounded: the leader's fetch is itself bounded by the HTTP timeout.
+            value.wait(timeout=self.timeout * 3 + 1)
+
+        with self._lock:
+            return self._settle(kid)
 
     # -- verification ---------------------------------------------------------
     def verify(self, token: str) -> VerifiedIdentity:
@@ -400,12 +450,22 @@ def _identity_from_access_claims(claims: Mapping[str, Any]) -> VerifiedIdentity:
     )
 
 
+MAX_JWKS_BYTES = 64 * 1024  # a real JWKS is a few KB; refuse anything absurd
+
+
 def _http_fetch_json(url: str, timeout: float) -> object:
-    response = httpx.get(url, timeout=timeout, headers={"Accept": "application/json"})
-    if response.status_code != 200:
-        raise _JwksFetchFailed(f"JWKS endpoint returned {response.status_code}")
+    """GET the JWKS with a bounded size and time. Never follows redirects."""
+    limits = httpx.Timeout(timeout, connect=min(2.0, timeout))
+    with httpx.stream("GET", url, timeout=limits, headers={"Accept": "application/json"}) as response:
+        if response.status_code != 200:
+            raise _JwksFetchFailed(f"JWKS endpoint returned {response.status_code}")
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            body.extend(chunk)
+            if len(body) > MAX_JWKS_BYTES:
+                raise _JwksFetchFailed("JWKS response too large")
     try:
-        return response.json()
+        return json.loads(bytes(body))
     except ValueError as exc:
         raise _JwksFetchFailed("JWKS endpoint returned invalid JSON") from exc
 
@@ -422,9 +482,40 @@ class VerifierConfig:
     timeout: float = 5.0
 
 
+LOCAL_DEV_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def is_secure_gait_url(url: str) -> bool:
+    """True if `url` may carry Gait credentials: https, or plain http to EXACTLY a
+    loopback host (local development).
+
+    Parses the URL and compares the exact hostname -- never a string prefix:
+    `http://localhost.evil.com`, `http://localhost@evil.com` and
+    `http://127.0.0.1.nip.io` are all rejected.
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.username or parsed.password:
+        return False  # credentials embedded in a URL are never acceptable
+    if parsed.scheme == "https":
+        return bool(parsed.hostname)
+    return parsed.scheme == "http" and parsed.hostname in LOCAL_DEV_HOSTS
+
+
 def load_verifier_config() -> VerifierConfig:
-    """Read and validate verifier settings. Raises AuthConfigurationError."""
+    """Read and validate verifier settings. Raises AuthConfigurationError.
+
+    Also validates GAIT_AUTH_URL (when set), since every Gait call made by this
+    SDK -- introspection, live session checks, application identity, security
+    signals -- sends a bearer token or the application credential to it.
+    """
     from gait_sdk.settings import _get_setting
+
+    auth_url = (_get_setting("GAIT_AUTH_URL") or _get_setting("AUTH_API_URL") or "").strip()
+    if auth_url and not is_secure_gait_url(auth_url):
+        raise AuthConfigurationError("GAIT_AUTH_URL must use https:// (http only for localhost).")
 
     verifier = (_get_setting("GAIT_TOKEN_VERIFIER", VERIFIER_INTROSPECTION) or VERIFIER_INTROSPECTION).strip().lower()
     if verifier not in SUPPORTED_VERIFIERS:
@@ -441,7 +532,7 @@ def load_verifier_config() -> VerifierConfig:
     missing = [n for n, v in (("GAIT_JWKS_URL", jwks_url), ("GAIT_ISSUER", issuer), ("GAIT_AUDIENCE", audience)) if not v]
     if missing:
         raise AuthConfigurationError(f"GAIT_TOKEN_VERIFIER=jwks requires {', '.join(missing)}.")
-    if not jwks_url.startswith("https://") and not jwks_url.startswith("http://localhost") and not jwks_url.startswith("http://127.0.0.1"):
+    if not is_secure_gait_url(jwks_url):
         raise AuthConfigurationError("GAIT_JWKS_URL must use https:// (http only for localhost).")
     return VerifierConfig(verifier=verifier, jwks_url=jwks_url, issuer=issuer, audience=audience, timeout=timeout)
 

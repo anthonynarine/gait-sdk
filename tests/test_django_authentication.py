@@ -131,6 +131,7 @@ def test_cookie_mode_success(monkeypatch):
     """
     Auth cookies present -> /whoami/ called -> ClaimsUser returned.
     """
+    monkeypatch.setenv("GAIT_ALLOW_COOKIE_AUTH", "True")  # legacy cookie mode is opt-in since 0.5.0
     auth = ExternalJWTAuthentication()
     request = DummyRequest(cookies={"access_token": "cookie.jwt.value", "csrftoken": "x"})
 
@@ -164,6 +165,7 @@ def test_cookie_mode_auth_service_unavailable_raises_503(monkeypatch):
     """
     If Gait is unreachable in cookie mode, raise 503 not 401.
     """
+    monkeypatch.setenv("GAIT_ALLOW_COOKIE_AUTH", "True")  # legacy cookie mode is opt-in since 0.5.0
     auth = ExternalJWTAuthentication()
     request = DummyRequest(cookies={"access_token": "cookie.jwt.value"})
 
@@ -245,6 +247,7 @@ def test_cookie_mode_timeout_raises_503(monkeypatch):
     unreachable-Gait case — explicitly proven with TimeoutException itself,
     not just a generic httpx.RequestError.
     """
+    monkeypatch.setenv("GAIT_ALLOW_COOKIE_AUTH", "True")  # legacy cookie mode is opt-in since 0.5.0
     auth = ExternalJWTAuthentication()
     request = DummyRequest(cookies={"access_token": "cookie.jwt.value"})
 
@@ -355,3 +358,43 @@ def test_bearer_cache_expired_entry_revalidates(monkeypatch):
     request2 = DummyRequest(headers={"Authorization": f"Bearer {token}"})
     auth.authenticate(request2)
     assert call_count["n"] == 2
+
+
+# =============================================================================
+# 0.5.0 hardening -- legacy cookie mode is opt-in and forwards only the access token
+# =============================================================================
+def test_cookie_mode_off_by_default_ignores_cookies(monkeypatch):
+    monkeypatch.delenv("GAIT_ALLOW_COOKIE_AUTH", raising=False)
+
+    async def must_not_call(self, url, cookies):  # pragma: no cover - must never run
+        raise AssertionError("cookie mode must be off by default")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", must_not_call)
+    request = DummyRequest(cookies={"access_token": "a", "refresh_token": "r", "temp_token": "t"})
+    assert ExternalJWTAuthentication().authenticate(request) is None
+
+
+def test_cookie_mode_forwards_only_access_token(monkeypatch):
+    monkeypatch.setenv("GAIT_ALLOW_COOKIE_AUTH", "True")
+    sent = {}
+
+    class MockResp:
+        status_code = 200
+
+        def json(self):
+            return {"id": "u1", "email": "e@x.com", "role": "r", "first_name": "F", "last_name": "L"}
+
+    async def capture(self, url, cookies):
+        sent.update(cookies)
+        return MockResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", capture)
+    request = DummyRequest(cookies={"access_token": "a", "refresh_token": "r", "temp_token": "t", "csrftoken": "c"})
+    ExternalJWTAuthentication().authenticate(request)
+    assert sent == {"access_token": "a"}  # never the 7-day refresh token or the 2FA temp token
+
+
+def test_refresh_or_temp_cookie_alone_is_not_a_credential(monkeypatch):
+    monkeypatch.setenv("GAIT_ALLOW_COOKIE_AUTH", "True")
+    request = DummyRequest(cookies={"refresh_token": "r", "temp_token": "t"})
+    assert ExternalJWTAuthentication().authenticate(request) is None

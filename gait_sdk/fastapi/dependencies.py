@@ -34,7 +34,12 @@ from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_503_SERVICE_UNAVAILABLE
 from gait_sdk.client import validate_token
 from gait_sdk.exceptions import AuthConfigurationError, InvalidTokenError, AuthServiceUnavailable
 from gait_sdk.session import acheck_session_live
-from gait_sdk.verification import VERIFIER_INTROSPECTION, get_token_verifier, load_verifier_config
+from gait_sdk.verification import (
+    VERIFIER_INTROSPECTION,
+    get_token_verifier,
+    identity_from_whoami,
+    load_verifier_config,
+)
 
 # Advertised on every 401 response, mirroring the Django adapter's
 # authenticate_header() contract (see django/authentication.py). FastAPI has
@@ -115,6 +120,10 @@ async def verify_token(
     try:
         logger.info("Validating Bearer token via Gait Auth API.")
         user_claims = await validate_token(token)
+        # Never trust the upstream body blindly: a 200 without a usable id/email
+        # fails closed here instead of flowing into authorization (and into
+        # require_live_session's subject binding) as an empty identity.
+        request.state.verified_identity = identity_from_whoami(user_claims)
         logger.info("Token validated successfully (claims attached).")
         # Step: make the verified claims available via get_current_user()
         # too, so request.state.user is never stale/unset for a request

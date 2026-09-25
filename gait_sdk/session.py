@@ -39,8 +39,12 @@ logger = logging.getLogger("gait_sdk.session")
 def _whoami_url() -> str:
     from gait_sdk.settings import _get_setting
 
+    from gait_sdk.verification import is_secure_gait_url
+
     base = _get_setting("GAIT_AUTH_URL") or _get_setting("AUTH_API_URL")
-    if not base:
+    # Checked here too, not only at startup: this call carries the user's
+    # bearer token, so it must never go over plaintext to a non-local host.
+    if not base or not is_secure_gait_url(base):
         raise AuthServiceUnavailable("Authentication service misconfigured.")
     return f"{base.rstrip('/')}/whoami/"
 
