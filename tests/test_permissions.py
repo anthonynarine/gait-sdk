@@ -2,13 +2,13 @@
 # Filename: tests/test_permissions.py
 
 # to run activate venv in path:
-# (gait_int_venv) \auth_integration> 
+# (gait_int_venv) \gait_sdk> 
 # pytest -v -s tests/test_permissions.py
 
 
 import pytest
 from types import SimpleNamespace
-from auth_integration.permissions import HasRole, HasAnyRole
+from gait_sdk.permissions import HasRole, HasAnyRole
 
 
 # ---------------------------------------------------------------------

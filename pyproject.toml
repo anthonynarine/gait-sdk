@@ -1,26 +1,111 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "auth_integration"
-version = "0.3.12"
-description = "Reusable authentication and permissions package for Django + FastAPI projects using an external Auth API (Gait)."
+name = "gait-sdk"
+version = "0.5.0"
+description = "Official Python SDK for Gait: verify Gait identities (local JWKS or introspection) in Django and FastAPI, with live session checks, application identity, and security signals."
 readme = "README.md"
-requires-python = ">=3.9"
-
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    { name = "Anthony Narine", email = "you@example.com" }
+    { name = "Anthony Narine" }
+]
+keywords = ["gait", "authentication", "jwt", "jwks", "django", "fastapi", "sdk", "identity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Django",
+    "Framework :: FastAPI",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Typing :: Typed",
 ]
 
 dependencies = [
-    "requests >=2.31.0",
+    # Core, framework-agnostic runtime deps — required to import
+    # gait_sdk.client / .settings / .exceptions on their own.
+    "httpx >=0.25",
     "python-decouple >=3.6",
-    "PyJWT >=2.10.1"
+
+    # NOTE: `requests` and `PyJWT` are declared but not currently imported
+    # anywhere in this package's source (gait_sdk/*.py) — verified by
+    # direct grep during SDK1. `docs/AuthIntegration_Client.md` documents that
+    # this package used `requests` (sync) before migrating to `httpx.AsyncClient`
+    # (async), so `requests` is confirmed legacy from that migration. Neither
+    # has a known current consumer relying on them being *importable from this
+    # package* specifically (as opposed to being present in their own
+    # environment already), but per SDK1 policy backward compatibility beats
+    # dependency-list neatness — left in place rather than removed on
+    # inspection alone. Candidate for a deliberate, separately-reviewed
+    # removal in a later milestone once confirmed no consumer depends on the
+    # transitive install.
+    "requests >=2.31.0",
+
+    # 0.4.0: PyJWT is now used directly by gait_sdk.verification
+    # (local RS256 verification against Gait's JWKS). The [crypto] extra
+    # pulls in `cryptography`, which PyJWT needs for RS256.
+    "PyJWT[crypto] >=2.10.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/anthonynarine/gait-sdk"
+Documentation = "https://github.com/anthonynarine/gait-sdk#readme"
+Changelog = "https://github.com/anthonynarine/gait-sdk/blob/main/docs/CHANGELOG.md"
+Security = "https://github.com/anthonynarine/gait-sdk/blob/main/docs/SECURITY.md"
+
+[project.optional-dependencies]
+# Install with `gait-sdk[django]` for the DRF authentication adapter
+# (gait_sdk.django.authentication / gait_sdk.authentication).
+#
+# SDK2 revisits SDK1's original choice to leave Django out of this list and
+# rely on djangorestframework installing it transitively. `gait_sdk`
+# does directly import Django itself, not just DRF: `gait_sdk/settings.py`
+# (core, imported regardless of which extra is installed) does
+# `from django.conf import settings as django_settings` inside a try/except
+# so it stays optional when Django isn't present at all — but when the
+# [django] extra IS installed, that import is a real, direct runtime
+# dependency, not merely DRF's implementation detail. Per SDK2's stated
+# principle ("if our code directly imports a runtime dependency, declare it
+# directly"), Django is now listed explicitly here rather than left to
+# whatever range djangorestframework's own install_requires happens to pin.
+# Floor picked to match the oldest Django LTS still supported as of this
+# milestone and to stay compatible with the existing djangorestframework
+# floor below (not a version this package has been newly tested against —
+# just a documented, non-arbitrary choice, consistent with what SDK1's own
+# clean-install verification already exercised at the high end, Django 5.2).
+django = [
+    "Django >=4.2",
+    "djangorestframework >=3.14",
+    "asgiref >=3.6",
+]
+
+# Install with `gait-sdk[fastapi]` for the FastAPI dependency adapter
+# (gait_sdk.fastapi.dependencies). `starlette` is listed explicitly
+# because dependencies.py imports from it directly, not only transitively
+# through fastapi.
+fastapi = [
+    "fastapi >=0.100",
+    "starlette >=0.27",
+]
+
+# Install with `gait-sdk[test]` to run this package's own test suite.
+test = [
+    "pytest >=7",
+    "pytest-asyncio >=0.21",
 ]
 
 [tool.setuptools.packages.find]
-include = ["auth_integration*", "auth_integration.*"]
+# gait_sdk is the package; auth_integration is the deprecated 0.5.x alias shim.
+include = ["gait_sdk*", "auth_integration"]
 
 [tool.setuptools]
 include-package-data = true

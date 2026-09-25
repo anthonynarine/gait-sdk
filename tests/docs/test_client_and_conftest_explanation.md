@@ -1,7 +1,7 @@
-# 🧪 auth_integration Test Suite — Client + conftest.py Overview
+# 🧪 gait_sdk Test Suite — Client + conftest.py Overview
 
 ## 📘 Purpose
-This document explains how the **`tests/test_client.py`** module validates the core functionality of the `validate_token()` function in `auth_integration.client`, and how the **`conftest.py`** file provides a stable, framework-agnostic test environment.
+This document explains how the **`tests/test_client.py`** module validates the core functionality of the `validate_token()` function in `gait_sdk.client`, and how the **`conftest.py`** file provides a stable, framework-agnostic test environment.
 
 ---
 
@@ -40,7 +40,7 @@ This ensures the environment variables are always available, even outside Django
 ### 🧭 Purpose
 `conftest.py` acts as a **test bootstrap file** that automatically prepares the runtime environment **before** pytest collects or executes any tests.
 
-This avoids repetitive setup code in each module and prevents import errors when `auth_integration.settings` tries to access Django settings.
+This avoids repetitive setup code in each module and prevents import errors when `gait_sdk.settings` tries to access Django settings.
 
 ### 🧱 File Contents
 ```python
@@ -49,7 +49,7 @@ import os
 import sys
 import pytest
 
-# Step 1: Ensure auth_integration is importable
+# Step 1: Ensure gait_sdk is importable
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -73,7 +73,7 @@ def setup_env(monkeypatch):
 |--------|-----------|
 | `ImproperlyConfigured` error from Django settings | Adds fake `DJANGO_SETTINGS_MODULE` so Django doesn’t crash when imported indirectly. |
 | Missing `GAIT_AUTH_URL` or `GAIT_TIMEOUT` | Automatically sets defaults for all tests. |
-| Manual import path setup | Ensures `auth_integration` is in `sys.path`. |
+| Manual import path setup | Ensures `gait_sdk` is in `sys.path`. |
 
 ### ✅ Benefits
 - Zero manual setup needed per test file.
@@ -110,5 +110,5 @@ tests/test_client.py::test_validate_token_malformed_json PASSED
 | `tests/test_client.py` | Tests async JWT validation logic with mocked responses. |
 | `tests/conftest.py` | Provides environment setup, Django isolation, and consistent configuration for all tests. |
 
-With these two files, your **Phase 2 Testing Plan** achieves full isolation from Django while retaining accurate, real-world validation coverage for `auth_integration.client`.
+With these two files, your **Phase 2 Testing Plan** achieves full isolation from Django while retaining accurate, real-world validation coverage for `gait_sdk.client`.
 
