@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title>How gait-sdk fits between Gait and your application</title>
+  <defs>
+    <marker id="a-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="a-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"/></marker>
+    <marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker>
+    <marker id="a-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/></filter>
+  </defs>
+
+  <!-- canvas -->
+  <rect x="0" y="0" width="1200" height="700" rx="18" fill="#f8fafc"/>
+
+  <!-- title -->
+  <text x="40" y="44" font-size="24" font-weight="700" fill="#0f172a">How gait-sdk works</text>
+  <text x="40" y="68" font-size="14" fill="#475569">Gait proves who someone is. gait-sdk checks that proof inside your app. Your app decides what they may do.</text>
+
+  <!-- ① login: browser → Gait, routed over the top -->
+  <path d="M160 170 V104 H1045 V170" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a-slate)"/>
+  <rect x="505" y="92" width="190" height="24" rx="12" fill="#f8fafc"/>
+  <text x="600" y="109" font-size="14" font-weight="600" fill="#334155" text-anchor="middle">① Log in (password, 2FA)</text>
+
+  <!-- ② token: Gait → browser, routed under the bottom -->
+  <path d="M1045 470 V612 H160 V476" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a-slate)"/>
+  <rect x="430" y="600" width="340" height="24" rx="12" fill="#f8fafc"/>
+  <text x="600" y="617" font-size="14" font-weight="600" fill="#334155" text-anchor="middle">② Signed access token (15 min) → kept in memory</text>
+
+  <!-- USER'S BROWSER -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="170" width="240" height="300" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  </g>
+  <text x="160" y="205" font-size="17" font-weight="700" fill="#0f172a" text-anchor="middle">Someone’s browser</text>
+  <text x="160" y="227" font-size="13" fill="#64748b" text-anchor="middle">React, mobile, any client</text>
+  <line x1="64" y1="244" x2="256" y2="244" stroke="#e2e8f0"/>
+  <text x="160" y="276" font-size="13" fill="#334155" text-anchor="middle">Holds the access token</text>
+  <text x="160" y="294" font-size="13" fill="#334155" text-anchor="middle">in memory only</text>
+  <text x="160" y="330" font-size="13" fill="#334155" text-anchor="middle">Refresh token lives in an</text>
+  <text x="160" y="348" font-size="13" fill="#334155" text-anchor="middle">HttpOnly cookie that only</text>
+  <text x="160" y="366" font-size="13" fill="#334155" text-anchor="middle">Gait can read</text>
+  <text x="160" y="420" font-size="12" fill="#94a3b8" text-anchor="middle">never sees a password again</text>
+  <text x="160" y="436" font-size="12" fill="#94a3b8" text-anchor="middle">after login</text>
+
+  <!-- YOUR APPLICATION -->
+  <g filter="url(#shadow)">
+    <rect x="360" y="140" width="460" height="440" rx="16" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+  </g>
+  <text x="590" y="170" font-size="17" font-weight="700" fill="#312e81" text-anchor="middle">Your application</text>
+  <text x="590" y="190" font-size="13" fill="#4338ca" text-anchor="middle">Django REST Framework · FastAPI</text>
+
+  <!-- gait-sdk inner box -->
+  <rect x="390" y="208" width="400" height="150" rx="12" fill="#ffffff" stroke="#6366f1" stroke-width="1.5"/>
+  <rect x="408" y="222" width="92" height="24" rx="12" fill="#4f46e5"/>
+  <text x="454" y="239" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">gait-sdk</text>
+  <text x="514" y="239" font-size="13" fill="#4338ca">pip install gait-sdk</text>
+  <text x="410" y="272" font-size="13.5" fill="#1e293b">✓ Checks the RS256 signature with Gait’s public key</text>
+  <text x="410" y="294" font-size="13.5" fill="#1e293b">✓ Checks issuer · audience · expiry · token type</text>
+  <text x="410" y="316" font-size="13.5" fill="#1e293b">✓ No call to Gait on normal requests (keys are cached)</text>
+  <text x="410" y="340" font-size="13.5" font-weight="600" fill="#4338ca">→ VerifiedIdentity(subject, email, session, …)</text>
+
+  <!-- ⑤ identity handoff -->
+  <line x1="600" y1="358" x2="600" y2="414" stroke="#4f46e5" stroke-width="2" marker-end="url(#a-indigo)"/>
+  <text x="614" y="386" font-size="13" font-weight="600" fill="#4338ca">⑤ who it is (identity only)</text>
+
+  <!-- authorization inner box -->
+  <rect x="390" y="418" width="400" height="140" rx="12" fill="#ffffff" stroke="#0ea5e9" stroke-width="1.5"/>
+  <rect x="408" y="432" width="126" height="24" rx="12" fill="#0284c7"/>
+  <text x="471" y="449" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">Your code</text>
+  <text x="548" y="449" font-size="13" fill="#0369a1">authorization</text>
+  <text x="410" y="484" font-size="13.5" fill="#1e293b">Memberships · roles · who may touch which record</text>
+  <text x="410" y="506" font-size="13.5" fill="#1e293b">Decides what this person may do, from your own data</text>
+  <text x="410" y="536" font-size="12.5" fill="#64748b">Gait tokens carry no roles or orgs, by design</text>
+
+  <!-- ③ API call: browser → sdk -->
+  <line x1="280" y1="290" x2="386" y2="290" stroke="#475569" stroke-width="2" marker-end="url(#a-slate)"/>
+  <text x="322" y="266" font-size="13" font-weight="600" fill="#334155" text-anchor="middle">③ API call</text>
+  <text x="322" y="282" font-size="12" fill="#64748b" text-anchor="middle">Bearer token</text>
+
+  <!-- GAIT -->
+  <g filter="url(#shadow)">
+    <rect x="920" y="170" width="250" height="300" rx="14" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+  </g>
+  <text x="1045" y="205" font-size="17" font-weight="700" fill="#064e3b" text-anchor="middle">Gait</text>
+  <text x="1045" y="227" font-size="13" fill="#047857" text-anchor="middle">identity service</text>
+  <line x1="944" y1="244" x2="1146" y2="244" stroke="#a7f3d0"/>
+  <text x="944" y="276" font-size="13.5" fill="#064e3b">• Login · 2FA · sessions</text>
+  <text x="944" y="302" font-size="13.5" fill="#064e3b">• Signs tokens (private key)</text>
+  <text x="944" y="328" font-size="13.5" fill="#064e3b">• Publishes public keys</text>
+  <text x="956" y="346" font-size="12" fill="#047857">/.well-known/jwks.json</text>
+  <text x="944" y="372" font-size="13.5" fill="#064e3b">• Live session check</text>
+  <text x="956" y="390" font-size="12" fill="#047857">/api/whoami/</text>
+  <text x="944" y="430" font-size="12" fill="#6b7280">Revoke a session here and</text>
+  <text x="944" y="446" font-size="12" fill="#6b7280">every live check sees it</text>
+
+  <!-- ④ JWKS: Gait → sdk (dashed = occasional) -->
+  <line x1="918" y1="300" x2="794" y2="300" stroke="#059669" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#a-green)"/>
+  <text x="870" y="276" font-size="13" font-weight="600" fill="#047857" text-anchor="middle">④ public keys</text>
+  <text x="870" y="292" font-size="12" fill="#059669" text-anchor="middle">~every 5 min</text>
+
+  <!-- ⑥ live session check: authz → Gait (dashed amber = sensitive actions only) -->
+  <path d="M790 500 H866 V412 H916" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#a-amber)"/>
+  <text x="880" y="518" font-size="13" font-weight="600" fill="#b45309">⑥ sensitive actions:</text>
+  <text x="880" y="534" font-size="12" fill="#b45309">live session check</text>
+
+  <!-- legend -->
+  <g font-size="13" font-weight="600">
+    <rect x="40" y="648" width="208" height="30" rx="15" fill="#d1fae5"/>
+    <text x="144" y="668" fill="#065f46" text-anchor="middle">Gait authenticates</text>
+    <rect x="262" y="648" width="190" height="30" rx="15" fill="#e0e7ff"/>
+    <text x="357" y="668" fill="#3730a3" text-anchor="middle">gait-sdk verifies</text>
+    <rect x="466" y="648" width="210" height="30" rx="15" fill="#e0f2fe"/>
+    <text x="571" y="668" fill="#075985" text-anchor="middle">Your app authorizes</text>
+  </g>
+  <g font-size="12" fill="#64748b">
+    <line x1="716" y1="663" x2="752" y2="663" stroke="#475569" stroke-width="2"/>
+    <text x="760" y="667">every request</text>
+    <line x1="862" y1="663" x2="898" y2="663" stroke="#059669" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="906" y="667">occasional</text>
+    <line x1="992" y1="663" x2="1028" y2="663" stroke="#d97706" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="1036" y="667">sensitive only</text>
+  </g>
+</svg>

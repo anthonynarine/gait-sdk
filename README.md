@@ -12,6 +12,8 @@ gait-sdk            verifies        — is this token genuine, and whose is it?
 your application    authorizes      — what may this person do here?
 ```
 
+![How gait-sdk works: the browser logs in to Gait, sends a Bearer token to your app, gait-sdk verifies it locally with Gait's cached public keys, your code authorizes, and sensitive actions get a live session check](https://raw.githubusercontent.com/anthonynarine/gait-sdk/main/docs/assets/how-it-works.svg)
+
 That boundary is the core design rule. The SDK hands your code a verified **identity** (`subject`, `email`, session, token id, issuer). Roles, organizations and permissions belong to your application. See [Architecture](docs/ARCHITECTURE.md).
 
 ---
