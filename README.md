@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/gait-sdk.svg)](https://pypi.org/project/gait-sdk/)
 [![Python](https://img.shields.io/pypi/pyversions/gait-sdk.svg)](https://pypi.org/project/gait-sdk/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/anthonynarine/gait-sdk/blob/main/LICENSE)
 
 The official Python SDK for **Gait**, an identity and security platform. Drop it into a **Django REST Framework** or **FastAPI** service to verify who is calling you, using identities Gait issues. It never issues tokens, stores passwords, or makes authorization decisions.
 
@@ -14,7 +14,28 @@ your application    authorizes      — what may this person do here?
 
 ![How gait-sdk works: the browser logs in to Gait, sends a Bearer token to your app, gait-sdk verifies it locally with Gait's cached public keys, your code authorizes, and sensitive actions get a live session check](https://raw.githubusercontent.com/anthonynarine/gait-sdk/main/docs/assets/how-it-works.svg)
 
-That boundary is the core design rule. The SDK hands your code a verified **identity** (`subject`, `email`, session, token id, issuer). Roles, organizations and permissions belong to your application. See [Architecture](docs/ARCHITECTURE.md).
+That boundary is the core design rule. The SDK hands your code a verified **identity** (`subject`, `email`, session, token id, issuer). Roles, organizations and permissions belong to your application. See [Architecture](https://github.com/anthonynarine/gait-sdk/blob/main/docs/ARCHITECTURE.md).
+
+### What is Gait?
+
+**Gait** is an identity and security service. It handles everything about *who someone is*:
+- sign-up and login;
+- two-factor authentication;
+- sessions, logout and "log out everywhere";
+- short-lived signed access tokens, and publishing the public keys that let other services check them.
+
+Alongside that, it watches its own security posture (a security observatory with automated investigation).
+
+Apps don't build login themselves. They send people to Gait, and gait-sdk lets their backend trust the result.
+
+> **Availability:** Gait currently serves its own first-party applications (starting with **Lumen**, a vascular-ultrasound reporting platform). Self-service onboarding for outside applications isn't open yet. You can still try gait-sdk end to end today with the local stand-in issuer in [`examples/`](https://github.com/anthonynarine/gait-sdk/tree/main/examples).
+
+### New here? Start here
+
+1. **[Concepts](https://github.com/anthonynarine/gait-sdk/blob/main/docs/CONCEPTS.md)**: tokens, signatures, JWKS, revocation, 401 vs 403, in plain language.
+2. **[Examples](https://github.com/anthonynarine/gait-sdk/tree/main/examples)**: a FastAPI and a Django app you can run in five minutes, no account needed.
+3. **[Integration guide](https://github.com/anthonynarine/gait-sdk/blob/main/docs/INTEGRATION_GUIDE.md)**: wiring it into your own app.
+4. Something wrong? **[Troubleshooting](https://github.com/anthonynarine/gait-sdk/blob/main/docs/TROUBLESHOOTING.md)** lists the exact error messages.
 
 ---
 
@@ -26,7 +47,7 @@ pip install "gait-sdk[fastapi]"    # FastAPI services
 pip install gait-sdk               # core only (verification, sessions, app identity)
 ```
 
-Requires Python 3.10+. Pin exact versions in production (`gait-sdk==0.5.0`). See [Supply chain](docs/PUBLISHING.md#consuming-safely).
+Requires Python 3.10+. Pin exact versions in production (`gait-sdk==0.5.0`). See [Supply chain](https://github.com/anthonynarine/gait-sdk/blob/main/docs/PUBLISHING.md#consuming-safely).
 
 ---
 
@@ -90,7 +111,7 @@ async def danger(claims: dict = Depends(require_live_session)):
 | `GAIT_AUTH_URL` | — | Gait's API base (`…/api`), used by live session checks, introspection, application identity and signals. `https` required (http only for `localhost`). |
 | `GAIT_TIMEOUT` | `5` | Seconds for calls to Gait. |
 | `GAIT_APPLICATION_CREDENTIAL` | — | Only for application identity / security signals. A secret: keep it in the environment. |
-| `GAIT_ALLOW_COOKIE_AUTH` | `False` | Deprecated legacy cookie mode (introspection only). Leave off. See [Security](docs/SECURITY.md). |
+| `GAIT_ALLOW_COOKIE_AUTH` | `False` | Deprecated legacy cookie mode (introspection only). Leave off. See [Security](https://github.com/anthonynarine/gait-sdk/blob/main/docs/SECURITY.md). |
 
 Settings come from Django settings first, then environment variables / `.env`. An invalid or incomplete configuration **stops the service at startup**.
 
@@ -117,7 +138,7 @@ Settings come from Django settings first, then environment variables / `.env`. A
 - **Revocation:** local verification sees a revoked session only when its token expires (≤15 min). Protect sensitive actions with `require_live_session`.
 - **No token, cookie or credential value is ever logged.**
 
-Full threat model, guarantees, limits and audit history: [docs/SECURITY.md](docs/SECURITY.md). To report a vulnerability, see the same file.
+Full threat model, guarantees, limits and audit history: [docs/SECURITY.md](https://github.com/anthonynarine/gait-sdk/blob/main/docs/SECURITY.md). To report a vulnerability, see the same file.
 
 ---
 
@@ -128,18 +149,21 @@ The package was renamed in **0.5.0**. The old import name still works as a depre
 1. `pip install gait-sdk` (replacing the old git URL pin).
 2. Replace `auth_integration` with `gait_sdk` in imports, `INSTALLED_APPS`, and DRF settings strings.
 
-Details: [Integration guide](docs/INTEGRATION_GUIDE.md#upgrading-from-auth_integration).
+Details: [Integration guide](https://github.com/anthonynarine/gait-sdk/blob/main/docs/INTEGRATION_GUIDE.md#upgrading-from-auth_integration).
 
 ## Documentation
 
 | | |
 |---|---|
-| [Architecture](docs/ARCHITECTURE.md) | The boundary, components, verification & caching, trust model |
-| [Integration guide](docs/INTEGRATION_GUIDE.md) | Wiring into Django/FastAPI, JWKS cut-over runbook, sensitive actions, testing |
-| [Security](docs/SECURITY.md) | Threat model, guarantees, known limits, hardening checklist, audit log, reporting |
-| [Publishing](docs/PUBLISHING.md) | How releases reach PyPI (a step-by-step tutorial), and consuming safely |
-| [Changelog](docs/CHANGELOG.md) | Version history |
-| Module references | [`gait_sdk/docs/`](gait_sdk/docs/) |
+| [Concepts](https://github.com/anthonynarine/gait-sdk/blob/main/docs/CONCEPTS.md) | Tokens, signatures, JWKS, revocation, 401/403/503, explained for newcomers |
+| [Examples](https://github.com/anthonynarine/gait-sdk/tree/main/examples) | Runnable FastAPI + Django apps with a local stand-in issuer |
+| [Architecture](https://github.com/anthonynarine/gait-sdk/blob/main/docs/ARCHITECTURE.md) | The boundary, components, verification & caching, trust model |
+| [Integration guide](https://github.com/anthonynarine/gait-sdk/blob/main/docs/INTEGRATION_GUIDE.md) | Wiring into Django/FastAPI, JWKS cut-over runbook, sensitive actions, testing |
+| [Security](https://github.com/anthonynarine/gait-sdk/blob/main/docs/SECURITY.md) | Threat model, guarantees, known limits, hardening checklist, audit log, reporting |
+| [Troubleshooting](https://github.com/anthonynarine/gait-sdk/blob/main/docs/TROUBLESHOOTING.md) | Exact error messages, what they mean, and how to fix them |
+| [Publishing](https://github.com/anthonynarine/gait-sdk/blob/main/docs/PUBLISHING.md) | How releases reach PyPI (a step-by-step tutorial), and consuming safely |
+| [Changelog](https://github.com/anthonynarine/gait-sdk/blob/main/docs/CHANGELOG.md) | Version history |
+| Module references | [`gait_sdk/docs/`](https://github.com/anthonynarine/gait-sdk/tree/main/gait_sdk/docs) |
 
 ## License
 
