@@ -1,7 +1,7 @@
-# Testing Guide for auth_integration
+# Testing guide for gait-sdk
 
 ## Overview
-This guide describes the testing strategy used for the `auth_integration` package.
+This guide describes the testing strategy used for the `gait-sdk` package.
 The suite ensures correct behavior for authentication validation, exception handling,
 permissions, utility helpers, and environment configuration.
 
@@ -20,20 +20,23 @@ All tests are executed using **pytest** with **pytest‑asyncio** enabled.
 ## Test Modules
 
 | File | Purpose |
-|------|----------|
-| `test_client.py` | Validates async token validation logic for `/api/whoami/`. |
-| `test_django_authentication.py` | DRF adapter: Bearer/cookie modes, claims attachment, `authenticate_header()` (401 vs 403 behavior). |
-| `test_dependencies.py` | FastAPI `verify_token` dependency behavior. |
-| `test_exceptions.py` | Ensures DRF exception classes use correct codes and messages. |
-| `test_integration_auth.py` | Cross-cutting auth flow checks spanning multiple modules. |
-| `test_permissions.py` | Confirms role‑based permission checks behave as expected. |
-| `test_settings.py` | Validates environment variable loading and Django fallback logic. |
-| `test_settings_django_unconfigured.py` | Confirms settings loading degrades gracefully when Django isn't configured (FastAPI-only usage). |
-| `test_utils.py` | Tests claim helper functions and role evaluation utilities. |
+|------|---------|
+| `test_jwks_verifier.py` | JWKS verification: token contract, algorithm pinning, key caching, rotation, cooldown, stale-key window, outage behavior |
+| `test_jwks_adapters.py` | Django + FastAPI adapters under JWKS; verifier selection and startup config validation; role-helper deprecations |
+| `test_session_check.py` | Live session check: active / revoked / unreachable / subject mismatch; never cached |
+| `test_security_hardening_050.py` | 0.5.0 audit fixes: no lock during I/O (M1), https + exact-localhost URLs (L1/L2), FastAPI shape validation (L5), bounded JWKS (L6), host-only logging |
+| `test_rename_compat_shim.py` | `auth_integration` alias returns the same `gait_sdk` modules, and warns |
+| `test_django_authentication.py` | DRF adapter: introspection path, bearer cache, legacy cookie mode (opt-in, access token only), `authenticate_header()` (401 vs 403) |
+| `test_dependencies.py`, `test_role_dependency_status_codes.py` | FastAPI `verify_token` and status codes |
+| `test_client.py` | The async `/whoami/` client |
+| `test_application.py` | Application (machine) identity |
+| `test_context.py` | `SecurityContext` |
+| `test_security_signal.py` | Tenant security signals |
+| `test_settings.py`, `test_settings_django_unconfigured.py`, `test_settings_decouple_isolation.py` | Configuration loading; the SDK never touches decouple's global config |
+| `test_permissions.py`, `test_permissions_fastapi_fallback.py`, `test_utils.py` | Deprecated role helpers (still fail closed) |
+| `test_exceptions.py`, `test_integration_auth.py` | Exception codes; cross-module checks |
 
-37 tests total as of v0.3.12. Run `pytest -v` from the repo root to see the current count — this table should be updated whenever a test file is added or removed.
-
----
+`_jwks_support.py` has shared helpers: test RSA keys, a fake JWKS endpoint, a fake clock, and `sign()` for building tokens in Gait's exact access-token format.
 
 ## Running Tests
 

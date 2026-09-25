@@ -1,26 +1,43 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "gait-sdk"
 version = "0.5.0"
-description = "Reusable authentication and permissions package for Django + FastAPI projects using an external Auth API (Gait)."
+description = "Official Python SDK for Gait: verify Gait identities (local JWKS or introspection) in Django and FastAPI, with live session checks, application identity, and security signals."
 readme = "README.md"
-requires-python = ">=3.9"
-
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-    { name = "Anthony Narine", email = "you@example.com" }
+    { name = "Anthony Narine" }
+]
+keywords = ["gait", "authentication", "jwt", "jwks", "django", "fastapi", "sdk", "identity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Django",
+    "Framework :: FastAPI",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Typing :: Typed",
 ]
 
 dependencies = [
     # Core, framework-agnostic runtime deps — required to import
-    # auth_integration.client / .settings / .exceptions on their own.
+    # gait_sdk.client / .settings / .exceptions on their own.
     "httpx >=0.25",
     "python-decouple >=3.6",
 
     # NOTE: `requests` and `PyJWT` are declared but not currently imported
-    # anywhere in this package's source (auth_integration/*.py) — verified by
+    # anywhere in this package's source (gait_sdk/*.py) — verified by
     # direct grep during SDK1. `docs/AuthIntegration_Client.md` documents that
     # this package used `requests` (sync) before migrating to `httpx.AsyncClient`
     # (async), so `requests` is confirmed legacy from that migration. Neither
@@ -33,19 +50,25 @@ dependencies = [
     # transitive install.
     "requests >=2.31.0",
 
-    # 0.4.0: PyJWT is now used directly by auth_integration.verification
+    # 0.4.0: PyJWT is now used directly by gait_sdk.verification
     # (local RS256 verification against Gait's JWKS). The [crypto] extra
     # pulls in `cryptography`, which PyJWT needs for RS256.
     "PyJWT[crypto] >=2.10.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/anthonynarine/gait-sdk"
+Documentation = "https://github.com/anthonynarine/gait-sdk#readme"
+Changelog = "https://github.com/anthonynarine/gait-sdk/blob/main/docs/CHANGELOG.md"
+Security = "https://github.com/anthonynarine/gait-sdk/blob/main/docs/SECURITY.md"
+
 [project.optional-dependencies]
-# Install with `auth_integration[django]` for the DRF authentication adapter
-# (auth_integration.django.authentication / auth_integration.authentication).
+# Install with `gait-sdk[django]` for the DRF authentication adapter
+# (gait_sdk.django.authentication / gait_sdk.authentication).
 #
 # SDK2 revisits SDK1's original choice to leave Django out of this list and
-# rely on djangorestframework installing it transitively. `auth_integration`
-# does directly import Django itself, not just DRF: `auth_integration/settings.py`
+# rely on djangorestframework installing it transitively. `gait_sdk`
+# does directly import Django itself, not just DRF: `gait_sdk/settings.py`
 # (core, imported regardless of which extra is installed) does
 # `from django.conf import settings as django_settings` inside a try/except
 # so it stays optional when Django isn't present at all — but when the
@@ -65,8 +88,8 @@ django = [
     "asgiref >=3.6",
 ]
 
-# Install with `auth_integration[fastapi]` for the FastAPI dependency adapter
-# (auth_integration.fastapi.dependencies). `starlette` is listed explicitly
+# Install with `gait-sdk[fastapi]` for the FastAPI dependency adapter
+# (gait_sdk.fastapi.dependencies). `starlette` is listed explicitly
 # because dependencies.py imports from it directly, not only transitively
 # through fastapi.
 fastapi = [
@@ -74,7 +97,7 @@ fastapi = [
     "starlette >=0.27",
 ]
 
-# Install with `auth_integration[test]` to run this package's own test suite.
+# Install with `gait-sdk[test]` to run this package's own test suite.
 test = [
     "pytest >=7",
     "pytest-asyncio >=0.21",

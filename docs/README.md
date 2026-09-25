@@ -1,21 +1,17 @@
-# docs/ index
+# Documentation
 
-The root [`README.md`](../README.md) is the canonical entry point — installation, quickstart (Django + FastAPI), the ecosystem diagram, the 401-vs-403 correctness guarantee, and the release process all live there. This directory holds deeper/narrower references:
+Start with the root [README](../README.md) (install and quick start), then:
 
-| Doc | Covers |
+| Doc | Read it when |
 |---|---|
-| [`CHANGELOG.md`](./CHANGELOG.md) | Version history. |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | PR workflow and coding standards. |
-| [`SECURITY_POLICY.md`](./SECURITY_POLICY.md) | Supported versions, vulnerability reporting. |
-| [`TESTING_GUIDE.md`](./TESTING_GUIDE.md) | Test suite layout and how to run it. |
-| [`VERSION_BUMP_GUIDE.md`](./VERSION_BUMP_GUIDE.md) | Using `bump_version.sh`, and the GitHub Release step it doesn't do for you. |
-| [`RELEASE_CHECKLIST.MD`](./RELEASE_CHECKLIST.MD) | The full step-by-step release checklist. |
-| [`UPDATE_BACKENDS.md`](./UPDATE_BACKENDS.md) | Updating a consuming service (`lumen_reports`, `lumen_ai/brain/backend`) after a new release. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | You want to understand how it works: the boundary, components, key caching, revocation, trust model |
+| [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | You're wiring it into a service, switching to JWKS, protecting sensitive actions, writing tests, or upgrading from `auth_integration` |
+| [SECURITY.md](SECURITY.md) | You need the threat model, guarantees, known limits, hardening checklist, audit history, or want to report a vulnerability |
+| [PUBLISHING.md](PUBLISHING.md) | You're releasing a version to PyPI (a step-by-step tutorial), or want to consume it safely |
+| [CHANGELOG.md](CHANGELOG.md) | You're upgrading and want to know what changed |
+| [TESTING_GUIDE.md](TESTING_GUIDE.md) | You're running or extending the test suite |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | You're opening a pull request |
 
-Module-level docs (what each file inside the package actually does) live next to the code: `auth_integration/docs/` and `auth_integration/django/docs/`.
+Module-level references live next to the code: [`gait_sdk/docs/`](../gait_sdk/docs/).
 
-For the full request-lifecycle trace across React, this package, and Gait — including real bugs found and fixed — see Lumen's own docs: `Lumen/docs/security/Auth_Token_Lifecycle_End_To_End.md`.
-
----
-
-Maintained by **Anthony Narine**
+For the whole platform (Gait + this SDK + Lumen), see Gait's `docs/IDENTITY_PLATFORM.md`.

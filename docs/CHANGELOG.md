@@ -7,7 +7,46 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
-## [Unreleased] — SDK4: Tenant Security Signal Client
+## [0.5.0] - 2026-09-25
+
+First release on PyPI, under a new name. **Upgrade guide:** `docs/INTEGRATION_GUIDE.md#upgrading-from-auth_integration`.
+
+### Changed
+- **Renamed:** package `auth_integration` → **`gait_sdk`**, distribution → **`gait-sdk`** (`pip install gait-sdk`). The repository is now `anthonynarine/gait-sdk`. Logger names are `gait_sdk.*`, and the Django app is `"gait_sdk"` (`GaitSdkConfig`, no models).
+- **Published to PyPI** via GitHub Actions Trusted Publishing (`.github/workflows/publish.yml`), tag-triggered, with a manual approval gate. No stored upload credentials.
+- `requires-python` is now `>=3.10`, matching the CI matrix (3.10–3.12).
+- **JWKS mode is Bearer-only:** cookies are never read.
+- **Legacy cookie mode is off by default:** enable it with `GAIT_ALLOW_COOKIE_AUTH=True` (deprecated). It now forwards only `access_token` to Gait.
+- `GAIT_AUTH_URL` and `GAIT_JWKS_URL` must be `https` (plain http only for exactly `localhost` / `127.0.0.1` / `::1`); URLs with embedded credentials are rejected. Validated at startup.
+
+### Deprecated
+- `import auth_integration` (and every `auth_integration.*` path, DRF setting string and `INSTALLED_APPS` entry) still works through a compatibility alias that returns the **same** module objects, and emits `DeprecationWarning`. **Removed in 0.6.0.**
+
+### Security
+Fixes for every finding of the 0.4.1 review (see `docs/SECURITY.md` → Audit log): M1 JWKS lock held during network I/O (single-flight fetching; cached keys never block); M2 cookie auth without CSRF protection; L1 localhost prefix bypass; L2 no TLS requirement on `GAIT_AUTH_URL`; L3 refresh token forwarded in cookie mode; L4 unsynchronized bearer cache; L5 unvalidated FastAPI introspection body; L6 unbounded JWKS response (64 KB / 20 keys). The Gait URL is now logged as a hostname only. Removed the original Django scaffold (`core/`, `manage.py`).
+
+### Removed
+- Obsolete repo files: `rename_package.sh`, `bump_version.sh` (releases now go through the publish workflow), the root `requirements.txt` dev snapshot, and `Flow-Diagram.md` (a Lumen workflow diagram that belongs in Lumen).
+
+## [0.4.1] - 2026-09-24
+
+### Fixed
+- The SDK no longer initializes python-decouple's **global** `config` at import time. It uses a private `AutoConfig` rooted at the working directory. Previously, importing the SDK before the host app read its own settings could make the host's `config("DATABASE_URL")` fail.
+
+## [0.4.0] - 2026-09-24
+
+### Added
+- **Local token verification:** `gait_sdk.verification` (then `auth_integration.verification`), with a `TokenVerifier` protocol, `JwksVerifier` (RS256 against Gait's JWKS: pinned algorithm, required `iss`/`aud`/`exp`/`iat`/`sub`/`sid`/`jti`/`token_use`, 30 s leeway, key caching with forced-refresh cooldown and a bounded stale window) and `IntrospectionVerifier` (the legacy `/whoami/` path, still the default). Both return **`VerifiedIdentity`**. Selected explicitly via `GAIT_TOKEN_VERIFIER`, never falling back from one to the other.
+- **Live session check** (hybrid revocation): `check_session_live` / `acheck_session_live`, Django `require_live_session(request)`, FastAPI `require_live_session` dependency.
+- Startup configuration validation (Django `AppConfig`, FastAPI `validate_configuration()`).
+
+### Changed
+- Under JWKS, `ClaimsUser.role/first_name/last_name` are `""`: Gait's RS256 tokens carry identity only.
+
+### Deprecated
+- `HasRole`, `HasAnyRole`, `require_role`, `utils.get_user_role/is_admin/is_physician/is_technologist`. Authorization belongs to the consuming app.
+
+### Included in 0.4.0 — SDK4: Tenant Security Signal Client
 
 Not yet tagged/released. Additive only — no change to `ClaimsUser`,
 `ApplicationPrincipal`, `verify_application`, `SecurityContext`, or any
@@ -18,14 +57,14 @@ existing public import path.
 - `auth_integration.security.SecuritySignalResult` — immutable receipt (`signal_id`, `control_key`, `evidence_id`, `received_at`) mirroring exactly what Gait's response contains; no invented "duplicate"/"idempotent" field, since Gait's own response doesn't distinguish a fresh signal from an idempotent replay.
 - New `auth_integration.exceptions.SecuritySignalRejected` (400) — a single exception for every signal-content rejection reason (local malformed input or Gait's own 400), mirroring the backend's own deliberately-singular `TenantSignalRejected`.
 - `signal_type`/`result` stay plain `str` parameters, not an SDK-side enum — Gait's own `tenant_signal_registry.py` is an explicitly growable, code-reviewed backend structure; hardcoding its contents into the SDK would create version drift for no safety benefit, since unapproved values are already rejected server-side. One convenience constant, `APPLICATION_SELF_CHECK`, is exported for the one currently-known approved value (documented as non-exhaustive).
-- `auth_integration/docs/AuthIntegration_TenantSecuritySignals.md` — full contract in founder/developer-readable language: what a signal is/isn't, `CUSTOMER_REPORTED` trust semantics, idempotency via `source_reference`, allowed vs. forbidden fields, and failure behavior.
+- `auth_integration/docs/security_signals.md` — full contract in founder/developer-readable language: what a signal is/isn't, `CUSTOMER_REPORTED` trust semantics, idempotency via `source_reference`, allowed vs. forbidden fields, and failure behavior.
 - `tests/test_security_signal.py` (44 tests): exact endpoint/header, valid/invalid/missing credential, unknown signal type, local input validation, timeout/network/malformed-response failure paths, credential/payload absence from logs and errors, a structural authority-injection proof (via `inspect.signature`) that none of Gait's own forbidden field names — `organization`, `scope`, `trust`, `control_key`, and 15 others, mirroring the backend's own strict-contract test matrix almost exactly — exist as parameters, idempotent-retry behavior (SDK never deduplicates locally, always forwards to Gait), and human-identity independence in both directions.
 
 ### Notes
 - No Django/FastAPI wiring, no `SecurityContext` integration, no Observatory/findings client, and no automatic instrumentation were added — all deliberately out of scope for this milestone.
 - The frozen backend contract for this milestone (`security/tenant_ingestion.py`, `tenant_signal_registry.py`, `models.py::TenantSecuritySignal`, `serializers.py`, `views.py`, and both `test_tenant_ingestion*.py` files) was inspected read-only in the Gait backend's `b-tenant1/tenant-boundary` line (tip `08a06b6`, the same commit the original SDK discovery brief named as the frozen tenancy baseline) — not guessed from this milestone's own prompt, which used slightly different terminology (`SELF_REPORTED` vs. the actual `CUSTOMER_REPORTED`) corrected here to match the real backend.
 
-## [Unreleased] — SDK3: SecurityContext
+### Included in 0.4.0 — SDK3: SecurityContext
 
 Not yet tagged/released. Additive only — no change to `ClaimsUser`,
 `ApplicationPrincipal`, `verify_token`, `verify_application`, or any
@@ -35,7 +74,7 @@ existing public import path.
 - `auth_integration.context.SecurityContext` — an immutable, framework-neutral composition of an already-verified human identity (`user`) and/or application identity (`application`). Performs no verification and no Gait network call; only accepts identities already verified elsewhere.
 - `SecurityContext.user` accepts either a real `ClaimsUser` instance (Django) or a raw claims dict (FastAPI's `verify_token()` never constructs a `ClaimsUser`) — checked structurally, never via `isinstance(user, ClaimsUser)`, because `ClaimsUser` currently lives in a module (`auth_integration.django.authentication`) that unconditionally imports Django/DRF; importing it for a runtime check would make `SecurityContext` require Django to import. `SecurityContext.application` is strictly `isinstance`-checked against `ApplicationPrincipal`, which has no such coupling.
 - `has_user` / `has_application` presence properties — identity-presence only, deliberately not named/shaped like an authorization check.
-- `auth_integration/docs/AuthIntegration_SecurityContext.md` — full contract, including the neither-identity rejection decision and why no Django/FastAPI request-integration helper was added this milestone.
+- `auth_integration/docs/context.md` — full contract, including the neither-identity rejection decision and why no Django/FastAPI request-integration helper was added this milestone.
 - `tests/test_context.py` (20 tests): user-only/application-only/both/neither states, immutability, exact-identity preservation, absence of cross-derived fields, no-network-on-construction, credential absence from repr, and type validation for malformed local input.
 
 ### Design decisions (documented, not implemented as code changes)
@@ -43,7 +82,7 @@ existing public import path.
 - No Django (`request.security_context`) or FastAPI (`Depends(get_security_context)`) integration helper was added: neither framework currently has an established per-request source of `ApplicationPrincipal` (SDK2 didn't wire it in), so such a helper today could only build a human-only context automatically — not enough value over calling `SecurityContext(user=...)` directly, and it would risk implying request-lifecycle integration that doesn't exist yet.
 - No `.to_dict()`/serialization was added — no current consumer need identified.
 
-## [Unreleased] — SDK2: Application Identity
+### Included in 0.4.0 — SDK2: Application Identity
 
 Not yet tagged/released. Additive only — no change to `ClaimsUser`, human
 JWT/claims behavior, or any existing public import path.
@@ -53,14 +92,14 @@ JWT/claims behavior, or any existing public import path.
 - `auth_integration.application.verify_application(credential=None)` — verifies a Gait `ApplicationCredential` against the frozen Gait backend endpoint `POST {GAIT_AUTH_URL}/applications/verify/`, sent via the dedicated `Gait-Application-Credential` header (never `Authorization: Bearer`). Falls back to the new `GAIT_APPLICATION_CREDENTIAL` setting when no credential is passed explicitly; raises immediately (no network call) if neither is present.
 - New `auth_integration.exceptions.InvalidApplicationCredentialError` (401) — kept deliberately separate from `InvalidTokenError` (human identity failures) and deliberately a single exception (Gait's own verification response doesn't distinguish missing/unknown/revoked/expired/suspended-application reasons either).
 - New `GAIT_APPLICATION_CREDENTIAL` setting, read through the existing `auth_integration.settings` loader (Django settings, then environment/`.env`) — server-side only, no default, never logged.
-- `auth_integration/docs/AuthIntegration_Application_Identity.md` — full contract: `ClaimsUser` vs `ApplicationPrincipal`, credential configuration, wire format, and why organization/environment authority belongs to Gait alone (no caller override exists).
+- `auth_integration/docs/application.md` — full contract: `ClaimsUser` vs `ApplicationPrincipal`, credential configuration, wire format, and why organization/environment authority belongs to Gait alone (no caller override exists).
 - `tests/test_application.py` (34 tests): valid/invalid/missing credential, network failure, timeout, malformed JSON, structurally-invalid responses (missing/empty/wrong-typed fields, unknown environment), `ApplicationPrincipal` construction/immutability, raw-credential absence from repr/logs/exception messages, organization/environment authority, no caller-side tenant-override parameter, and human/application identity independence in both directions.
 
 ### Fixed / Changed (SDK1 follow-ups, same milestone)
 - `pyproject.toml`'s `[django]` extra now declares `Django >=4.2` explicitly instead of relying on `djangorestframework`'s own transitive dependency — `auth_integration/settings.py` directly imports `django.conf.settings`, so this is a real, direct runtime dependency of this package, not only DRF's.
 - Added an end-to-end regression test (`tests/test_role_dependency_status_codes.py`) proving the FastAPI role-check flow keeps a real authentication failure (missing/invalid token → 401, `WWW-Authenticate: Bearer`) distinct from an authorization failure (authenticated but wrong role → 403) — confirmed the existing `require_role`/`verify_token` composition already behaved correctly; no production code change was needed, only the missing test.
 
-## [Unreleased] — SDK1: Foundation Hardening
+### Included in 0.4.0 — SDK1: Foundation Hardening
 
 Not yet tagged/released — see the SDK1 report for full context. No version
 bump, no JWT/claims-shape/backward-compatibility change for existing Lumen
