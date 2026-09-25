@@ -1,5 +1,64 @@
 # Architecture
 
+![How gait-sdk works](assets/how-it-works.svg)
+
+## The three flows
+
+**A normal request: no call to Gait at all**
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant S as gait-sdk (in your app)
+    participant A as Your code
+    participant G as Gait
+    B->>S: GET /reports  (Authorization: Bearer <access token>)
+    Note over S: key for this kid already cached?<br/>yes → verify locally
+    S->>S: check RS256 signature, iss, aud, exp, token_use
+    S->>A: VerifiedIdentity(subject, email, session_id, …)
+    A->>A: look up membership by subject → authorize
+    A-->>B: 200 OK
+```
+
+**A sensitive action: your rules first, then a live check with Gait**
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant S as gait-sdk
+    participant A as Your code
+    participant G as Gait
+    B->>S: POST /exams/42/finalize (Bearer)
+    S->>A: VerifiedIdentity
+    A->>A: role check + is exam 42 theirs? (403 / 404 → stop, Gait never called)
+    A->>S: require_live_session(request)
+    S->>G: GET /api/whoami/ (same token, no cache)
+    alt session active
+        G-->>S: 200 (same subject)
+        S-->>A: ok
+        A->>A: finalize (mutate)
+        A-->>B: 200
+    else session revoked
+        G-->>S: 401
+        S-->>B: 401 (nothing mutated)
+    else Gait unreachable
+        S-->>B: 503 (nothing mutated, fails closed)
+    end
+```
+
+**Key rotation: a token signed with a brand-new key**
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as gait-sdk
+    participant G as Gait
+    Note over S: token arrives with kid "k2" (not cached)
+    S->>G: GET /.well-known/jwks.json (one forced refresh; other threads wait)
+    G-->>S: { keys: [k2, …] } (replaces the cached set)
+    S->>S: verify with k2 ✓
+    Note over S: another unknown kid within 30 s → 401 immediately,<br/>no fetch (stops random-kid flooding)
+```
+
 ## The boundary
 
 | Layer | Responsibility | Never does |
