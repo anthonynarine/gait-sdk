@@ -38,3 +38,6 @@ db.sqlite3
 
 # Project-specific
 project_plans.png
+
+# examples/dev_issuer.py generates a local signing key -- never commit it
+.dev_issuer_key.pem

@@ -7,6 +7,17 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
+## [0.5.1] - 2026-09-25
+
+Documentation release. No code changes: behavior is identical to 0.5.0.
+
+### Added
+- **"How gait-sdk works" diagram** (`docs/assets/how-it-works.svg`) at the top of the README (now also on PyPI), plus sequence diagrams for a normal request, a sensitive action and key rotation in `docs/ARCHITECTURE.md`.
+- **`docs/CONCEPTS.md`**: tokens, signatures and JWKS, local vs live verification, revocation, access vs refresh tokens, 401/403/503, issuer/audience/subject, in plain language.
+- **`examples/`**: runnable FastAPI and single-file Django apps, plus `dev_issuer.py` (a local stand-in for Gait that signs tokens in Gait's exact format and serves a JWKS). Verified against `gait-sdk` installed from PyPI.
+- **`docs/TROUBLESHOOTING.md`**: the SDK's exact error messages, their causes and fixes.
+- README: "What is Gait?", an availability note, and a "New here? Start here" path.
+
 ## [0.5.0] - 2026-09-25
 
 First release on PyPI, under a new name. **Upgrade guide:** `docs/INTEGRATION_GUIDE.md#upgrading-from-auth_integration`.

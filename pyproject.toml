@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gait-sdk"
-version = "0.5.0"
+version = "0.5.1"
 description = "Official Python SDK for Gait: verify Gait identities (local JWKS or introspection) in Django and FastAPI, with live session checks, application identity, and security signals."
 readme = "README.md"
 requires-python = ">=3.10"
