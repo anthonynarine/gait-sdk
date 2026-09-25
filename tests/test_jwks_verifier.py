@@ -7,8 +7,8 @@ import httpx
 import jwt
 import pytest
 
-from auth_integration.exceptions import AuthConfigurationError, AuthServiceUnavailable, InvalidTokenError
-from auth_integration.verification import JwksVerifier, VerifiedIdentity, parse_jwks, _JwksFetchFailed
+from gait_sdk.exceptions import AuthConfigurationError, AuthServiceUnavailable, InvalidTokenError
+from gait_sdk.verification import JwksVerifier, VerifiedIdentity, parse_jwks, _JwksFetchFailed
 
 from tests._jwks_support import (
     AUDIENCE, ISSUER, JWKS_URL, KEY_A, KEY_B, KEY_WEAK, FakeClock, jwk, jwks, make_verifier, sign,
@@ -318,7 +318,7 @@ def test_verification_failure_never_calls_whoami(monkeypatch):
     def boom(*args, **kwargs):  # pragma: no cover - must never run
         raise AssertionError("JWKS verifier must never downgrade to /whoami/")
 
-    monkeypatch.setattr("auth_integration.client.validate_token", boom)
+    monkeypatch.setattr("gait_sdk.client.validate_token", boom)
     monkeypatch.setattr(httpx.AsyncClient, "get", boom)
     verifier, endpoint = make_verifier()
     endpoint.fail = httpx.ConnectError("down")

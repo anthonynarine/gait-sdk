@@ -19,20 +19,20 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from auth_integration.exceptions import InvalidTokenError
-from auth_integration.fastapi.dependencies import verify_token
+from gait_sdk.exceptions import InvalidTokenError
+from gait_sdk.fastapi.dependencies import verify_token
 
 
 @pytest.fixture()
 def fallback_permissions(monkeypatch):
-    """Force auth_integration.permissions to load its FastAPI fallback branch."""
+    """Force gait_sdk.permissions to load its FastAPI fallback branch."""
     monkeypatch.setitem(sys.modules, "rest_framework.permissions", None)
-    sys.modules.pop("auth_integration.permissions", None)
-    module = importlib.import_module("auth_integration.permissions")
+    sys.modules.pop("gait_sdk.permissions", None)
+    module = importlib.import_module("gait_sdk.permissions")
     try:
         yield module
     finally:
-        sys.modules.pop("auth_integration.permissions", None)
+        sys.modules.pop("gait_sdk.permissions", None)
 
 
 @pytest.fixture()
@@ -76,7 +76,7 @@ def test_invalid_token_is_401_not_403(client, monkeypatch):
         raise InvalidTokenError("Invalid or expired token.")
 
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token", fake_validate_token
+        "gait_sdk.fastapi.dependencies.validate_token", fake_validate_token
     )
 
     resp = client.get("/admin-only", headers={"Authorization": "Bearer bad.token"})
@@ -89,7 +89,7 @@ def test_valid_auth_wrong_role_is_403(client, monkeypatch):
         return TECH_CLAIMS
 
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token", fake_validate_token
+        "gait_sdk.fastapi.dependencies.validate_token", fake_validate_token
     )
 
     resp = client.get("/admin-only", headers={"Authorization": "Bearer good.token"})
@@ -101,7 +101,7 @@ def test_valid_auth_correct_role_is_200(client, monkeypatch):
         return ADMIN_CLAIMS
 
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token", fake_validate_token
+        "gait_sdk.fastapi.dependencies.validate_token", fake_validate_token
     )
 
     resp = client.get("/admin-only", headers={"Authorization": "Bearer good.token"})

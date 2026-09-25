@@ -1,6 +1,6 @@
 # Filename: tests/test_security_signal.py
 """
-SDK4 — regression tests for auth_integration.security (Tenant Security
+SDK4 — regression tests for gait_sdk.security (Tenant Security
 Signal Client). Mirrors tests/test_application.py's style; never talks to
 a real Gait — httpx is always monkeypatched.
 
@@ -12,13 +12,13 @@ import inspect
 import httpx
 import pytest
 
-from auth_integration.application import APPLICATION_CREDENTIAL_HEADER
-from auth_integration.exceptions import (
+from gait_sdk.application import APPLICATION_CREDENTIAL_HEADER
+from gait_sdk.exceptions import (
     AuthServiceUnavailable,
     InvalidApplicationCredentialError,
     SecuritySignalRejected,
 )
-from auth_integration.security import SecuritySignalResult, send_security_signal
+from gait_sdk.security import SecuritySignalResult, send_security_signal
 
 
 VALID_RESPONSE = {
@@ -53,7 +53,7 @@ def _mock_post(status_code=201, json_result=None, json_exc=None, captured=None):
 # 1. Exact backend endpoint
 # ---------------------------------------------------------------------
 async def test_signal_posts_to_exact_tenant_signal_endpoint(monkeypatch):
-    monkeypatch.setattr("auth_integration.security.GAIT_AUTH_URL", "https://gait.example.com/api")
+    monkeypatch.setattr("gait_sdk.security.GAIT_AUTH_URL", "https://gait.example.com/api")
     captured = {}
     monkeypatch.setattr(httpx.AsyncClient, "post", _mock_post(json_result=VALID_RESPONSE, captured=captured))
 
@@ -132,7 +132,7 @@ async def test_omitted_payload_defaults_to_empty_dict_on_wire(monkeypatch):
 # 4. Missing application credential
 # ---------------------------------------------------------------------
 async def test_missing_credential_raises_explicitly_before_network_call(monkeypatch):
-    monkeypatch.setattr("auth_integration.security.GAIT_APPLICATION_CREDENTIAL", None)
+    monkeypatch.setattr("gait_sdk.security.GAIT_APPLICATION_CREDENTIAL", None)
     called = {"n": 0}
 
     async def mock_post(self, url, headers=None, json=None):
@@ -147,7 +147,7 @@ async def test_missing_credential_raises_explicitly_before_network_call(monkeypa
 
 
 async def test_configured_credential_used_when_none_passed_explicitly(monkeypatch):
-    monkeypatch.setattr("auth_integration.security.GAIT_APPLICATION_CREDENTIAL", "configured-secret")
+    monkeypatch.setattr("gait_sdk.security.GAIT_APPLICATION_CREDENTIAL", "configured-secret")
     captured = {}
     monkeypatch.setattr(httpx.AsyncClient, "post", _mock_post(json_result=VALID_RESPONSE, captured=captured))
 
@@ -287,7 +287,7 @@ async def test_structurally_invalid_response_fails_closed(monkeypatch, bad_respo
 
 async def test_evidence_id_none_is_accepted_as_valid():
     """The model documents evidence_id can legitimately be null."""
-    from auth_integration.security import _build_result
+    from gait_sdk.security import _build_result
 
     result = _build_result({**VALID_RESPONSE, "evidence_id": None})
     assert result.evidence_id is None
@@ -312,7 +312,7 @@ async def test_raw_credential_absent_from_logs_on_success(monkeypatch, caplog):
     secret = "super-secret-application-credential-value"
     monkeypatch.setattr(httpx.AsyncClient, "post", _mock_post(json_result=VALID_RESPONSE))
 
-    with caplog.at_level(logging.DEBUG, logger="auth_integration.security"):
+    with caplog.at_level(logging.DEBUG, logger="gait_sdk.security"):
         await send_security_signal(
             signal_type="APPLICATION_SELF_CHECK", result="PASS", source_reference="ref-12",
             credential=secret,
@@ -327,7 +327,7 @@ async def test_raw_credential_absent_from_logs_on_rejection(monkeypatch, caplog)
     secret = "super-secret-application-credential-value"
     monkeypatch.setattr(httpx.AsyncClient, "post", _mock_post(status_code=401))
 
-    with caplog.at_level(logging.DEBUG, logger="auth_integration.security"):
+    with caplog.at_level(logging.DEBUG, logger="gait_sdk.security"):
         with pytest.raises(InvalidApplicationCredentialError):
             await send_security_signal(
                 signal_type="APPLICATION_SELF_CHECK", result="PASS", source_reference="ref-12b",
@@ -369,7 +369,7 @@ async def test_full_payload_not_logged_by_default(monkeypatch, caplog):
     sentinel = "this-exact-payload-value-should-not-be-logged-verbatim"
     monkeypatch.setattr(httpx.AsyncClient, "post", _mock_post(json_result=VALID_RESPONSE))
 
-    with caplog.at_level(logging.DEBUG, logger="auth_integration.security"):
+    with caplog.at_level(logging.DEBUG, logger="gait_sdk.security"):
         await send_security_signal(
             signal_type="APPLICATION_SELF_CHECK", result="PASS", source_reference="ref-12e",
             payload={"note": sentinel}, credential="a-real-secret",
@@ -423,7 +423,7 @@ def test_metadata_dict_cannot_carry_authority_despite_arbitrary_keys():
     params = inspect.signature(send_security_signal).parameters
     assert "payload" in params
     # No separate code path exists that promotes payload keys to top-level
-    # request fields — confirmed by reading auth_integration/security.py's
+    # request fields — confirmed by reading gait_sdk/security.py's
     # request body construction directly (body["payload"] = payload or {}).
 
 
@@ -528,7 +528,7 @@ def test_security_context_application_alone_cannot_authenticate_a_signal():
     SecurityContext -- the raw credential must always be supplied
     independently (as an argument or via GAIT_APPLICATION_CREDENTIAL).
     """
-    from auth_integration.application import ApplicationPrincipal
+    from gait_sdk.application import ApplicationPrincipal
 
     principal = ApplicationPrincipal(
         application_id="a", application_slug="s", organization_id="o",

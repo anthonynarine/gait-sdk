@@ -1,10 +1,10 @@
 # Filename: tests/test_permissions_fastapi_fallback.py
 """
-Regression tests for auth_integration.permissions' FastAPI/non-DRF fallback
+Regression tests for gait_sdk.permissions' FastAPI/non-DRF fallback
 branch (SDK1 Part D).
 
 This repo's test environment has djangorestframework installed, so
-`auth_integration.permissions` normally loads its DRF branch. To exercise
+`gait_sdk.permissions` normally loads its DRF branch. To exercise
 the fallback branch that a real DRF-less FastAPI install would load, these
 tests force `rest_framework.permissions` to fail importing (the standard
 "set sys.modules[name] = None" trick) and reload the module under test.
@@ -23,18 +23,18 @@ import pytest
 
 @pytest.fixture()
 def fallback_permissions(monkeypatch):
-    """Load auth_integration.permissions with its FastAPI fallback branch active."""
+    """Load gait_sdk.permissions with its FastAPI fallback branch active."""
     monkeypatch.setitem(sys.modules, "rest_framework.permissions", None)
-    sys.modules.pop("auth_integration.permissions", None)
-    module = importlib.import_module("auth_integration.permissions")
+    sys.modules.pop("gait_sdk.permissions", None)
+    module = importlib.import_module("gait_sdk.permissions")
     try:
         yield module
     finally:
         # Drop the fallback-loaded module from the cache so any test that
-        # runs afterward and imports auth_integration.permissions fresh gets
+        # runs afterward and imports gait_sdk.permissions fresh gets
         # the normal DRF branch again (rest_framework.permissions is restored
         # by monkeypatch's own teardown, which runs after this fixture's).
-        sys.modules.pop("auth_integration.permissions", None)
+        sys.modules.pop("gait_sdk.permissions", None)
 
 
 def test_module_loaded_fallback_branch(fallback_permissions):

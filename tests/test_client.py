@@ -2,13 +2,13 @@
 # Filename: tests/test_client.py
 
 # to run activate venv in path:
-# (gait_int_venv) \auth_integration> 
+# (gait_int_venv) \gait_sdk> 
 # pytest -v -s tests/test_client.py
 
 import pytest
 import httpx
-from auth_integration.client import validate_token
-from auth_integration.exceptions import InvalidTokenError, AuthServiceUnavailable
+from gait_sdk.client import validate_token
+from gait_sdk.exceptions import InvalidTokenError, AuthServiceUnavailable
 
 
 pytestmark = pytest.mark.asyncio

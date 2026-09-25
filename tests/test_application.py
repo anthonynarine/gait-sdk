@@ -1,6 +1,6 @@
 # Filename: tests/test_application.py
 """
-SDK2 — regression tests for auth_integration.application (Gait Application
+SDK2 — regression tests for gait_sdk.application (Gait Application
 machine identity). Mirrors tests/test_client.py's style; never talks to a
 real Gait — httpx is always monkeypatched.
 
@@ -13,12 +13,12 @@ import logging
 import httpx
 import pytest
 
-from auth_integration.application import (
+from gait_sdk.application import (
     APPLICATION_CREDENTIAL_HEADER,
     ApplicationPrincipal,
     verify_application,
 )
-from auth_integration.exceptions import AuthServiceUnavailable, InvalidApplicationCredentialError
+from gait_sdk.exceptions import AuthServiceUnavailable, InvalidApplicationCredentialError
 
 # Note: no module-level `pytestmark = pytest.mark.asyncio` here (unlike
 # tests/test_client.py) — this file mixes async and sync tests, and
@@ -99,7 +99,7 @@ async def test_invalid_credential_raises_invalid_application_credential_error(mo
 # 3. Missing credential (not passed, not configured)
 # ---------------------------------------------------------------------
 async def test_missing_credential_raises_explicitly(monkeypatch):
-    monkeypatch.setattr("auth_integration.application.GAIT_APPLICATION_CREDENTIAL", None)
+    monkeypatch.setattr("gait_sdk.application.GAIT_APPLICATION_CREDENTIAL", None)
 
     with pytest.raises(InvalidApplicationCredentialError):
         await verify_application()
@@ -107,7 +107,7 @@ async def test_missing_credential_raises_explicitly(monkeypatch):
 
 async def test_missing_credential_never_calls_gait(monkeypatch):
     """A missing credential must fail before any network call, not after."""
-    monkeypatch.setattr("auth_integration.application.GAIT_APPLICATION_CREDENTIAL", None)
+    monkeypatch.setattr("gait_sdk.application.GAIT_APPLICATION_CREDENTIAL", None)
     called = {"n": 0}
 
     async def mock_post(self, url, headers=None):
@@ -122,7 +122,7 @@ async def test_missing_credential_never_calls_gait(monkeypatch):
 
 
 async def test_configured_credential_used_when_none_passed_explicitly(monkeypatch):
-    monkeypatch.setattr("auth_integration.application.GAIT_APPLICATION_CREDENTIAL", "configured-secret")
+    monkeypatch.setattr("gait_sdk.application.GAIT_APPLICATION_CREDENTIAL", "configured-secret")
     captured = {}
     monkeypatch.setattr(
         httpx.AsyncClient,
@@ -277,7 +277,7 @@ async def test_raw_credential_absent_from_logs_on_success(monkeypatch, caplog):
         httpx.AsyncClient, "post", _mock_post(status_code=200, json_result=VALID_RESPONSE)
     )
 
-    with caplog.at_level(logging.DEBUG, logger="auth_integration.application"):
+    with caplog.at_level(logging.DEBUG, logger="gait_sdk.application"):
         await verify_application(credential=secret)
 
     assert secret not in caplog.text
@@ -287,7 +287,7 @@ async def test_raw_credential_absent_from_logs_on_rejection(monkeypatch, caplog)
     secret = "super-secret-application-credential-value"
     monkeypatch.setattr(httpx.AsyncClient, "post", _mock_post(status_code=401))
 
-    with caplog.at_level(logging.DEBUG, logger="auth_integration.application"):
+    with caplog.at_level(logging.DEBUG, logger="gait_sdk.application"):
         with pytest.raises(InvalidApplicationCredentialError):
             await verify_application(credential=secret)
 
@@ -351,13 +351,13 @@ def test_verify_application_accepts_no_tenant_override_parameters():
 async def test_valid_human_with_no_app_credential_does_not_create_principal(monkeypatch):
     """A valid ClaimsUser existing tells verify_application() nothing — it
     still fails explicitly if no application credential is configured."""
-    from auth_integration.django.authentication import ClaimsUser
+    from gait_sdk.django.authentication import ClaimsUser
 
     human = ClaimsUser(
         id="u1", email="doc@example.com", role="physician",
         first_name="Doc", last_name="McGee",
     )
-    monkeypatch.setattr("auth_integration.application.GAIT_APPLICATION_CREDENTIAL", None)
+    monkeypatch.setattr("gait_sdk.application.GAIT_APPLICATION_CREDENTIAL", None)
 
     with pytest.raises(InvalidApplicationCredentialError):
         await verify_application()
@@ -379,8 +379,8 @@ async def test_valid_app_credential_establishes_principal_with_no_user_at_all(mo
 
 
 async def test_invalid_human_token_does_not_affect_separately_verified_principal(monkeypatch):
-    from auth_integration.django.authentication import ExternalJWTAuthentication
-    from auth_integration.exceptions import InvalidTokenError
+    from gait_sdk.django.authentication import ExternalJWTAuthentication
+    from gait_sdk.exceptions import InvalidTokenError
 
     class DummyRequest:
         def __init__(self):
@@ -399,7 +399,7 @@ async def test_invalid_human_token_does_not_affect_separately_verified_principal
         raise InvalidTokenError("Invalid or expired token.")
 
     monkeypatch.setattr(
-        "auth_integration.django.authentication.validate_token", mock_validate_token
+        "gait_sdk.django.authentication.validate_token", mock_validate_token
     )
     from rest_framework.exceptions import AuthenticationFailed
 
@@ -414,7 +414,7 @@ async def test_invalid_human_token_does_not_affect_separately_verified_principal
 
 
 async def test_invalid_application_credential_does_not_mutate_claims_user(monkeypatch):
-    from auth_integration.django.authentication import ClaimsUser
+    from gait_sdk.django.authentication import ClaimsUser
 
     human = ClaimsUser(
         id="u1", email="doc@example.com", role="physician",

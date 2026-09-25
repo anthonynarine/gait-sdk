@@ -12,7 +12,7 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-from auth_integration.verification import JwksVerifier
+from gait_sdk.verification import JwksVerifier
 
 ISSUER = "https://auth.gait.test"
 AUDIENCE = "urn:gait:lumen"

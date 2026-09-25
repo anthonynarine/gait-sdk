@@ -1,6 +1,6 @@
 # Filename: tests/test_dependencies.py
 """
-Regression tests for auth_integration.fastapi.dependencies (SDK1 Part G).
+Regression tests for gait_sdk.fastapi.dependencies (SDK1 Part G).
 
 Uses FastAPI's own TestClient with a tiny throwaway app wiring up
 `verify_token`/`get_current_user` exactly the way a real consumer would,
@@ -13,8 +13,8 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from auth_integration.exceptions import AuthServiceUnavailable, InvalidTokenError
-from auth_integration.fastapi.dependencies import get_current_user, verify_token
+from gait_sdk.exceptions import AuthServiceUnavailable, InvalidTokenError
+from gait_sdk.fastapi.dependencies import get_current_user, verify_token
 
 
 VALID_CLAIMS = {
@@ -65,7 +65,7 @@ def _fake_validate_token(return_value=None, exc=None):
 # ---------------------------------------------------------------------------
 def test_valid_bearer_returns_verified_claims(monkeypatch):
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token",
+        "gait_sdk.fastapi.dependencies.validate_token",
         _fake_validate_token(return_value=VALID_CLAIMS),
     )
 
@@ -90,7 +90,7 @@ def test_missing_authorization_header_returns_401_with_challenge():
 # ---------------------------------------------------------------------------
 def test_invalid_token_returns_401_with_challenge(monkeypatch):
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token",
+        "gait_sdk.fastapi.dependencies.validate_token",
         _fake_validate_token(exc=InvalidTokenError("Invalid or expired token.")),
     )
 
@@ -105,7 +105,7 @@ def test_invalid_token_returns_401_with_challenge(monkeypatch):
 # ---------------------------------------------------------------------------
 def test_gait_unavailable_returns_503(monkeypatch):
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token",
+        "gait_sdk.fastapi.dependencies.validate_token",
         _fake_validate_token(exc=AuthServiceUnavailable("Authentication service unreachable.")),
     )
 
@@ -119,13 +119,13 @@ def test_gait_unavailable_returns_503(monkeypatch):
 # ---------------------------------------------------------------------------
 def test_timeout_maps_to_503(monkeypatch):
     async def _raise_timeout(token):
-        # auth_integration.client.validate_token already translates
+        # gait_sdk.client.validate_token already translates
         # httpx.TimeoutException into AuthServiceUnavailable (see
         # tests/test_client.py) — this proves the FastAPI adapter forwards
         # that outcome to a 503, not a 401 or an unhandled crash.
         raise AuthServiceUnavailable("Authentication service unreachable.")
 
-    monkeypatch.setattr("auth_integration.fastapi.dependencies.validate_token", _raise_timeout)
+    monkeypatch.setattr("gait_sdk.fastapi.dependencies.validate_token", _raise_timeout)
 
     resp = client.get("/secure", headers={"Authorization": "Bearer whatever"})
 
@@ -137,7 +137,7 @@ def test_timeout_maps_to_503(monkeypatch):
 # ---------------------------------------------------------------------------
 def test_malformed_gait_response_returns_503(monkeypatch):
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token",
+        "gait_sdk.fastapi.dependencies.validate_token",
         _fake_validate_token(
             exc=AuthServiceUnavailable("Malformed response from authentication service.")
         ),
@@ -156,7 +156,7 @@ def test_unexpected_exception_fails_closed_as_401(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token", _raise_unexpected
+        "gait_sdk.fastapi.dependencies.validate_token", _raise_unexpected
     )
 
     resp = client.get("/secure", headers={"Authorization": "Bearer whatever"})
@@ -170,7 +170,7 @@ def test_unexpected_exception_fails_closed_as_401(monkeypatch):
 # ---------------------------------------------------------------------------
 def test_request_state_user_matches_verified_claims(monkeypatch):
     monkeypatch.setattr(
-        "auth_integration.fastapi.dependencies.validate_token",
+        "gait_sdk.fastapi.dependencies.validate_token",
         _fake_validate_token(return_value=VALID_CLAIMS),
     )
 

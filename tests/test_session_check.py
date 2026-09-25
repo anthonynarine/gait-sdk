@@ -3,8 +3,8 @@
 import httpx
 import pytest
 
-from auth_integration.exceptions import AuthServiceUnavailable, InvalidTokenError
-from auth_integration.session import acheck_session_live, check_session_live
+from gait_sdk.exceptions import AuthServiceUnavailable, InvalidTokenError
+from gait_sdk.session import acheck_session_live, check_session_live
 
 
 class _Resp:
@@ -100,7 +100,7 @@ async def test_async_variant_same_semantics(gait):
 
 def test_session_check_bypasses_jwks_and_bearer_caches(gait, monkeypatch):
     # Warm both caches; the live check must still hit Gait.
-    from auth_integration.django import authentication as auth_module
+    from gait_sdk.django import authentication as auth_module
     from tests._jwks_support import make_verifier, sign
 
     verifier, endpoint = make_verifier()

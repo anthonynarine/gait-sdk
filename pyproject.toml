@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "auth_integration"
-version = "0.4.1"
+name = "gait-sdk"
+version = "0.5.0"
 description = "Reusable authentication and permissions package for Django + FastAPI projects using an external Auth API (Gait)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -81,7 +81,8 @@ test = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["auth_integration*", "auth_integration.*"]
+# gait_sdk is the package; auth_integration is the deprecated 0.5.x alias shim.
+include = ["gait_sdk*", "auth_integration"]
 
 [tool.setuptools]
 include-package-data = true

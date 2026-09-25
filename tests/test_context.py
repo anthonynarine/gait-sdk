@@ -1,6 +1,6 @@
 # Filename: tests/test_context.py
 """
-SDK3 — regression tests for auth_integration.context.SecurityContext.
+SDK3 — regression tests for gait_sdk.context.SecurityContext.
 
 Covers SDK3 Part 14's required test matrix items 1-10 (11-16 are the
 existing suites, run alongside this file as part of the full run).
@@ -11,8 +11,8 @@ import dataclasses
 import httpx
 import pytest
 
-from auth_integration.application import ApplicationPrincipal
-from auth_integration.context import SecurityContext
+from gait_sdk.application import ApplicationPrincipal
+from gait_sdk.context import SecurityContext
 
 
 CLAIMS_USER_KWARGS = dict(
@@ -32,7 +32,7 @@ APPLICATION_KWARGS = dict(
 
 
 def _real_claims_user():
-    from auth_integration.django.authentication import ClaimsUser
+    from gait_sdk.django.authentication import ClaimsUser
 
     return ClaimsUser(**CLAIMS_USER_KWARGS)
 
@@ -204,7 +204,7 @@ def test_construction_performs_no_network_io(monkeypatch):
 # 10. Raw application credential absent from repr
 # ---------------------------------------------------------------------
 async def test_raw_application_credential_absent_from_context_repr(monkeypatch):
-    from auth_integration.application import verify_application
+    from gait_sdk.application import verify_application
 
     secret = "super-secret-application-credential-value"
 

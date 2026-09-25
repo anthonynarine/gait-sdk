@@ -11,18 +11,18 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from rest_framework.exceptions import AuthenticationFailed
 
-from auth_integration.django import authentication as auth_module
-from auth_integration.django.authentication import (
+from gait_sdk.django import authentication as auth_module
+from gait_sdk.django.authentication import (
     AuthenticationServiceUnavailable,
     ClaimsUser,
     ExternalJWTAuthentication,
     require_live_session,
 )
-from auth_integration.exceptions import AuthConfigurationError
-from auth_integration.fastapi.dependencies import get_current_user
-from auth_integration.fastapi.dependencies import require_live_session as fastapi_require_live_session
-from auth_integration.fastapi.dependencies import verify_token
-from auth_integration.verification import (
+from gait_sdk.exceptions import AuthConfigurationError
+from gait_sdk.fastapi.dependencies import get_current_user
+from gait_sdk.fastapi.dependencies import require_live_session as fastapi_require_live_session
+from gait_sdk.fastapi.dependencies import verify_token
+from gait_sdk.verification import (
     IntrospectionVerifier,
     JwksVerifier,
     get_token_verifier,
@@ -61,7 +61,7 @@ def _no_whoami(monkeypatch):
         raise AssertionError("JWKS mode must never call /whoami/")
 
     monkeypatch.setattr(auth_module, "validate_token", boom)
-    monkeypatch.setattr("auth_integration.fastapi.dependencies.validate_token", boom)
+    monkeypatch.setattr("gait_sdk.fastapi.dependencies.validate_token", boom)
     monkeypatch.setattr(httpx.AsyncClient, "get", boom)
 
 
@@ -283,18 +283,18 @@ def test_jwks_url_must_be_https(monkeypatch):
 
 
 def test_django_appconfig_fails_startup_on_bad_config(monkeypatch):
-    import auth_integration
-    from auth_integration.apps import AuthIntegrationConfig
+    import gait_sdk
+    from gait_sdk.apps import GaitSdkConfig
 
     monkeypatch.setenv("GAIT_TOKEN_VERIFIER", "jwks")
     monkeypatch.delenv("GAIT_JWKS_URL", raising=False)
     with pytest.raises(AuthConfigurationError):
-        AuthIntegrationConfig("auth_integration", auth_integration).ready()
+        GaitSdkConfig("gait_sdk", gait_sdk).ready()
 
 
 # --- deprecations -----------------------------------------------------------------------------
 def test_role_helpers_warn_deprecated():
-    from auth_integration import permissions, utils
+    from gait_sdk import permissions, utils
 
     with pytest.warns(DeprecationWarning):
         permissions.HasRole("physician")
@@ -311,7 +311,7 @@ def test_role_helpers_warn_deprecated():
 def test_role_helpers_deny_jwks_identity(jwks_mode):
     import warnings
 
-    from auth_integration import permissions
+    from gait_sdk import permissions
 
     request = DummyRequest(headers={"Authorization": f"Bearer {sign()}"})
     ExternalJWTAuthentication().authenticate(request)

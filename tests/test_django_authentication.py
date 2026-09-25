@@ -5,8 +5,8 @@ import httpx
 import pytest
 from rest_framework.exceptions import AuthenticationFailed
 
-from auth_integration.django import authentication as auth_module
-from auth_integration.django.authentication import (
+from gait_sdk.django import authentication as auth_module
+from gait_sdk.django.authentication import (
     ExternalJWTAuthentication,
     ClaimsUser,
     AuthenticationServiceUnavailable,
@@ -41,7 +41,7 @@ def test_shim_import_path_works():
     Ensure stable import path exists for DRF settings strings.
     """
     # Step 1: Import from public entrypoint
-    from auth_integration.authentication import ExternalJWTAuthentication as ShimAuth
+    from gait_sdk.authentication import ExternalJWTAuthentication as ShimAuth
 
     assert ShimAuth is not None
 
@@ -76,7 +76,7 @@ def test_bearer_success_returns_claimsuser_and_claims(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "auth_integration.django.authentication.validate_token", mock_validate_token
+        "gait_sdk.django.authentication.validate_token", mock_validate_token
     )
 
     user, auth_obj = auth.authenticate(request)
@@ -103,13 +103,13 @@ def test_bearer_invalid_raises_authenticationfailed(monkeypatch):
     request = DummyRequest(headers={"Authorization": "Bearer bad.token"})
 
     # Step 1: Mock validate_token to raise InvalidTokenError
-    from auth_integration.exceptions import InvalidTokenError
+    from gait_sdk.exceptions import InvalidTokenError
 
     async def mock_validate_token(token: str):
         raise InvalidTokenError("Invalid or expired token.")
 
     monkeypatch.setattr(
-        "auth_integration.django.authentication.validate_token", mock_validate_token
+        "gait_sdk.django.authentication.validate_token", mock_validate_token
     )
 
     with pytest.raises(AuthenticationFailed):
@@ -224,7 +224,7 @@ def test_bearer_malformed_claims_fail_closed(monkeypatch, bad_claims):
         return bad_claims
 
     monkeypatch.setattr(
-        "auth_integration.django.authentication.validate_token", mock_validate_token
+        "gait_sdk.django.authentication.validate_token", mock_validate_token
     )
 
     with pytest.raises(AuthenticationFailed):
@@ -280,7 +280,7 @@ def test_bearer_cache_hit_skips_revalidation(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "auth_integration.django.authentication.validate_token", mock_validate_token
+        "gait_sdk.django.authentication.validate_token", mock_validate_token
     )
 
     # Step 1: first call -> real validation (cache miss)
@@ -337,7 +337,7 @@ def test_bearer_cache_expired_entry_revalidates(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "auth_integration.django.authentication.validate_token", mock_validate_token
+        "gait_sdk.django.authentication.validate_token", mock_validate_token
     )
 
     fake_now = {"t": 1_000_000.0}

@@ -2,12 +2,12 @@
 # Filename: tests/test_utils.py
 
 # to run activate venv in path:
-# (gait_int_venv) \auth_integration> 
+# (gait_int_venv) \gait_sdk> 
 # pytest -v -s tests/test_utils.py
 
 import pytest
 from types import SimpleNamespace
-from auth_integration.utils import (
+from gait_sdk.utils import (
     get_user_claims,
     get_user_id,
     get_user_role,

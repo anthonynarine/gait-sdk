@@ -2,13 +2,13 @@
 # Filename: tests/test_exceptions.py
 
 # to run activate venv in path:
-# (gait_int_venv) \auth_integration> 
+# (gait_int_venv) \gait_sdk> 
 # pytest -v -s tests/test_exceptions.py
 
 
 import pytest
 from rest_framework.exceptions import APIException
-from auth_integration.exceptions import AuthServiceUnavailable, InvalidTokenError
+from gait_sdk.exceptions import AuthServiceUnavailable, InvalidTokenError
 
 
 # ---------------------------------------------------------------------
