@@ -7,6 +7,19 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
+## [Unreleased]
+
+Documentation only. No code changes.
+
+### Changed
+- **README:** covers both jobs. Reporting security checks now has its own quick start, and verifying users is marked early access.
+  - The user quick starts use the default `introspection` verifier. A new "Choosing a verifier" section explains that `jwks` needs Gait's key set to list at least one key.
+  - New: a compatibility table and a full reference of the public API (signatures, returns, exceptions).
+  - Links to Gait's docs at gaitobservatory.com.
+  - The availability note is current: reporting security checks is self-service, and verifying users is early access.
+  - The pinning example is now `0.5.1`.
+- **Changelog:** the 0.4.0 entry no longer says its parts are unreleased (they shipped in 0.4.0). Added compare links, and fixed a pointer to a README section that no longer exists.
+
 ## [0.5.1] - 2026-09-25
 
 Documentation release. No code changes: behavior is identical to 0.5.0.
@@ -46,6 +59,8 @@ Fixes for every finding of the 0.4.1 review (see `docs/SECURITY.md` → Audit lo
 
 ## [0.4.0] - 2026-09-24
 
+Module paths in this entry use the package's name at the time, `auth_integration`. Since 0.5.0 it's `gait_sdk`.
+
 ### Added
 - **Local token verification:** `gait_sdk.verification` (then `auth_integration.verification`), with a `TokenVerifier` protocol, `JwksVerifier` (RS256 against Gait's JWKS: pinned algorithm, required `iss`/`aud`/`exp`/`iat`/`sub`/`sid`/`jti`/`token_use`, 30 s leeway, key caching with forced-refresh cooldown and a bounded stale window) and `IntrospectionVerifier` (the legacy `/whoami/` path, still the default). Both return **`VerifiedIdentity`**. Selected explicitly via `GAIT_TOKEN_VERIFIER`, never falling back from one to the other.
 - **Live session check** (hybrid revocation): `check_session_live` / `acheck_session_live`, Django `require_live_session(request)`, FastAPI `require_live_session` dependency.
@@ -59,7 +74,7 @@ Fixes for every finding of the 0.4.1 review (see `docs/SECURITY.md` → Audit lo
 
 ### Included in 0.4.0 — SDK4: Tenant Security Signal Client
 
-Not yet tagged/released. Additive only — no change to `ClaimsUser`,
+Additive only — no change to `ClaimsUser`,
 `ApplicationPrincipal`, `verify_application`, `SecurityContext`, or any
 existing public import path.
 
@@ -77,7 +92,7 @@ existing public import path.
 
 ### Included in 0.4.0 — SDK3: SecurityContext
 
-Not yet tagged/released. Additive only — no change to `ClaimsUser`,
+Additive only — no change to `ClaimsUser`,
 `ApplicationPrincipal`, `verify_token`, `verify_application`, or any
 existing public import path.
 
@@ -95,7 +110,7 @@ existing public import path.
 
 ### Included in 0.4.0 — SDK2: Application Identity
 
-Not yet tagged/released. Additive only — no change to `ClaimsUser`, human
+Additive only — no change to `ClaimsUser`, human
 JWT/claims behavior, or any existing public import path.
 
 ### Added
@@ -112,8 +127,7 @@ JWT/claims behavior, or any existing public import path.
 
 ### Included in 0.4.0 — SDK1: Foundation Hardening
 
-Not yet tagged/released — see the SDK1 report for full context. No version
-bump, no JWT/claims-shape/backward-compatibility change for existing Lumen
+No JWT/claims-shape/backward-compatibility change for existing Lumen
 callers.
 
 ### Fixed
@@ -135,7 +149,7 @@ callers.
 ## [0.3.12] - 2026-07-26
 
 ### Fixed
-- **`ExternalJWTAuthentication` silently returned 403 instead of 401 for auth failures.** DRF rewrites `AuthenticationFailed`/`NotAuthenticated` from 401 to 403 whenever no authenticator advertises a `WWW-Authenticate` header. Added `authenticate_header()` returning `"Bearer"`, so DRF stops downgrading the status. This had been silently disabling every consuming service's token-refresh-on-401 logic — see the root `README.md`'s "Correctness guarantee" section for the full story.
+- **`ExternalJWTAuthentication` silently returned 403 instead of 401 for auth failures.** DRF rewrites `AuthenticationFailed`/`NotAuthenticated` from 401 to 403 whenever no authenticator advertises a `WWW-Authenticate` header. Added `authenticate_header()` returning `"Bearer"`, so DRF stops downgrading the status. This had been silently disabling every consuming service's token-refresh-on-401 logic — see `docs/SECURITY.md` → Audit log.
 
 ## [0.3.11] - 2026-01-05
 
@@ -151,3 +165,13 @@ callers.
 
 ### Added
 - DRF auth adapter test coverage (`test_django_authentication.py`).
+
+[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/anthonynarine/gait-sdk/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/anthonynarine/gait-sdk/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/anthonynarine/gait-sdk/compare/v0.3.12...v0.4.0
+[0.3.12]: https://github.com/anthonynarine/gait-sdk/compare/v0.3.11...v0.3.12
+[0.3.11]: https://github.com/anthonynarine/gait-sdk/compare/v0.3.10...v0.3.11
+[0.3.10]: https://github.com/anthonynarine/gait-sdk/compare/v0.3.9...v0.3.10
+[0.3.9]: https://github.com/anthonynarine/gait-sdk/releases/tag/v0.3.9
