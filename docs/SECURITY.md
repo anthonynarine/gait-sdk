@@ -42,12 +42,17 @@ Please **do not open a public issue**. Report privately through GitHub's *Securi
 
 ## Hardening checklist for consuming services
 
-- [ ] `GAIT_TOKEN_VERIFIER=jwks`, with `GAIT_JWKS_URL`, `GAIT_ISSUER` and `GAIT_AUDIENCE` all set, and `https` URLs only
+- [ ] `GAIT_AUTH_URL` is `https` (plain `http` only for `localhost`)
 - [ ] `require_live_session` on every action you'd consider sensitive, called **after** your own authorization check
 - [ ] `GAIT_ALLOW_COOKIE_AUTH` unset (off)
 - [ ] `GAIT_APPLICATION_CREDENTIAL` only in environment variables, never in code or logs
 - [ ] `gait-sdk` pinned to an exact version (optionally `--require-hashes`)
 - [ ] Clients send `Authorization: Bearer <access token>` and keep the token in memory, not `localStorage`
+
+> **Local verification (`jwks`).** Switch to `GAIT_TOKEN_VERIFIER=jwks`, with `GAIT_JWKS_URL`, `GAIT_ISSUER` and
+> `GAIT_AUDIENCE` all set and `https` URLs only, once Gait publishes signing keys: check that
+> `/.well-known/jwks.json` lists at least one key first. With an empty key set, every token is rejected. Until then,
+> the default `introspection` mode is the one that works.
 
 ---
 

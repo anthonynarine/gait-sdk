@@ -187,7 +187,7 @@ def test_authenticate_header_returns_bearer():
     authenticate_header() return value, DRF silently rewrites 401 -> 403 on
     every AuthenticationFailed, which disables client-side token refresh.
     This is the single most important behavioral contract this adapter
-    makes (see root README "Correctness guarantee: 401 vs 403").
+    makes (see docs/SECURITY.md, Audit log: 0.3.12).
     """
     auth = ExternalJWTAuthentication()
     assert auth.authenticate_header(DummyRequest()) == "Bearer"

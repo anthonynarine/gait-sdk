@@ -13,7 +13,7 @@ It supports **both DEV (Bearer token)** and **PROD (HttpOnly cookies)** validati
 2. Call Gait `/whoami/` to validate the session
 3. Attach `request.user_claims = {...}`
 4. Return `(ClaimsUser(...), claims)` — a lightweight authenticated user backed by the validated claims, **not** `AnonymousUser`. There is no local Django `User` row at any point.
-5. Raise proper DRF exceptions on failure, with `authenticate_header()` returning `"Bearer"` so DRF reports a real `401` instead of silently downgrading to `403` (see the root `README.md`'s "Correctness guarantee" section — this was a real bug, fixed in v0.3.12)
+5. Raise proper DRF exceptions on failure, with `authenticate_header()` returning `"Bearer"` so DRF reports a real `401` instead of silently downgrading to `403` (this was a real bug, fixed in v0.3.12: see `docs/SECURITY.md` → Audit log)
 
 ---
 
