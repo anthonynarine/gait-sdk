@@ -18,6 +18,7 @@ Documentation only. No code changes.
   - Links to Gait's docs at gaitobservatory.com.
   - The availability note is current: reporting security checks is self-service, and verifying users is early access.
   - The pinning example is now `0.5.1`.
+- **Security guide:** `GAIT_TOKEN_VERIFIER=jwks` moved out of the hardening checklist into a note: switch once Gait's key set lists at least one key. An https `GAIT_AUTH_URL` item takes its place.
 - **Changelog:** the 0.4.0 entry no longer says its parts are unreleased (they shipped in 0.4.0). Added compare links, and fixed a pointer to a README section that no longer exists.
 
 ## [0.5.1] - 2026-09-25
