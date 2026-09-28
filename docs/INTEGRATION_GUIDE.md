@@ -52,7 +52,7 @@ if not member.can_finalize_reports: ...
 
 - Treat `subject` as an **opaque string**. Don't parse it or assume it's numeric.
 - If you ever trust more than one Gait issuer, key on `(issuer, subject)`.
-- Never authorize from anything in the token beyond identity. There are no role claims, by design.
+- Never authorize from anything beyond identity. The RS256/JWKS token has no role claim, by design; `request.user.role` is a legacy field filled only on the introspection path (from Gait's `/whoami/`), and isn't for authorization.
 
 ## 4. Protect sensitive actions
 
@@ -67,7 +67,7 @@ def post(self, request, exam_id):
     finalize(exam_id)                                     # 4. mutate
 ```
 
-Choose these actions deliberately: anything irreversible, clinical sign-off, or permission changes. Lumen gates exam sign / finalize / unfinalize / addendum and all membership changes. **Do the authorization first**, so Gait is never called for requests you would reject anyway.
+Choose these actions deliberately: anything irreversible, clinical sign-off, or permission changes (in Lumen's case: exam sign / finalize / unfinalize / addendum and membership changes; Lumen doesn't call `require_live_session` yet). **Do the authorization first**, so Gait is never called for requests you would reject anyway.
 
 ## 5. Cut over from introspection to JWKS
 
