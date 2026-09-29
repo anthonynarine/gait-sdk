@@ -1,0 +1,272 @@
+# Built-in checks
+
+gait-sdk 0.6.0 (unreleased) ships built-in check packs. A pack reads your application's own configuration, decides an outcome for each check, and reports each result to Gait as its own security signal. CHK2a ships the **Django pack v1.0.0** (21 checks). FastAPI and dependency packs come later.
+
+- [Running the checks](#running-the-checks)
+- [What is sent (and what never is)](#what-is-sent-and-what-never-is)
+- [Outcomes and results](#outcomes-and-results)
+- [The Django pack](#the-django-pack)
+- [Django's own deployment checks](#djangos-own-deployment-checks)
+- [CI and scheduling](#ci-and-scheduling)
+- [Exit codes](#exit-codes)
+
+## Running the checks
+
+Inside a Django project (add `"gait_sdk"` to `INSTALLED_APPS`):
+
+```bash
+python manage.py gait_check --dry-run
+python manage.py gait_check
+```
+
+Without `manage.py` (the `gait-check` command is installed with the package):
+
+```bash
+gait-check --pack django --settings mysite.settings --dry-run
+```
+
+Sending needs the same two settings as any other signal: `GAIT_AUTH_URL` and `GAIT_APPLICATION_CREDENTIAL` (the application's connection key). `--dry-run` and `--no-send` need neither.
+
+| Flag | Meaning |
+|---|---|
+| `--pack django` | Pack to run (repeatable). Only `django` exists today; any other value is a usage error. Default: `django`. |
+| `--settings MODULE` | `gait-check` only: sets `DJANGO_SETTINGS_MODULE`, then runs `django.setup()`. (`manage.py` has its own `--settings`.) |
+| `--dry-run` | Run the checks and print the exact request bodies that would be sent, one per check. Sends nothing, needs no key. |
+| `--no-send` | Run the checks and exit with the usual codes, without contacting Gait. For gating CI. |
+| `--environment X` | When sending: an **assertion only**. The environment always comes from the key's application; a mismatch exits 3 and sends nothing. With `--dry-run`/`--no-send`: the environment to evaluate (default `production`). One of `local`, `test`, `ci`, `staging`, `production`. |
+| `--json` | Print a JSON report: `{run_id, application, environment, results: [{id, outcome, result, facts, sent, error}], unmapped_django_ids}`. With `--dry-run` it also has `dry_run: true` and `requests` (the bodies). |
+| `--fail-on {fail,warning,never}` | Exit 1 when a result is at or above this level. Default `fail`. |
+| `--fail-on-unknown` | Also exit 1 on `unknown` or `error` outcomes. |
+| `--run-id ID` | The `source_reference` of every signal in the run (max 256 characters). Default `run:<uuid4>`. In CI use something stable per job, like `ci:<sha>:<job>`, so a retried job doesn't record the run twice. |
+| `--only ID` / `--skip ID` | Run only, or skip, these check ids (repeatable). Skipped checks send nothing. |
+
+**How it sends.** One POST per check to Gait's tenant-signal endpoint: `signal_type` is the check id, `result` is the mapped result, `source_reference` is the run id. If Gait is unreachable or answers unexpectedly, that POST is retried up to three times after 1, 2 and 4 seconds, with the same `source_reference` (Gait records a (application, check, run id) triple only once, so a retry can't double-count). If it still fails, the remaining checks in the run aren't attempted. A rejected check (400) is never retried and doesn't stop the others. A rejected key (401) is never retried and stops the run.
+
+## What is sent (and what never is)
+
+Each signal carries one fixed-shape payload:
+
+```json
+{
+  "signal_type": "CHK.DJANGO.HSTS",
+  "result": "WARNING",
+  "source_reference": "ci:3611eb6:build-1842",
+  "payload": {
+    "v": 1, "pack": "django", "pack_version": "1.0.0", "sdk_version": "0.6.0",
+    "outcome": "weak",
+    "facts": {"hsts_seconds": 86400, "include_subdomains": false, "preload": false,
+              "django_ids": ["security.W005", "security.W021"]}
+  }
+}
+```
+
+The design keeps patient data and secrets out by construction:
+
+- **Only typed configuration facts.** Every fact is a boolean, a bounded integer, a value from a fixed list, or (for `django_ids`) a list of Django check ids that must match `^[a-z_]{1,20}\.[EW][0-9]{3}$`. There is no free-text field anywhere.
+- **Never a setting value.** Checks read only the named settings, plus `INSTALLED_APPS` and the URL resolver where a check needs them. They report facts *about* a setting ("is HSTS at least a year?"), never the value itself. The SECRET_KEY and any fallback keys are measured (length, distinct characters, known prefix, known placeholder) and never copied, logged or printed.
+- **Never request data.** Checks don't look at requests, users, sessions or database rows.
+- **A fixed registry.** Check ids, fact names, types and limits come from `gait_sdk/checks/checks_v1.json`, which Gait's server vendors byte for byte. Fact names avoid words Gait's audit log redacts (`password`, `token`, `secret`, `cookie`, `patient`, and others); the registry refuses to load if one appears.
+- **Checked twice.** The SDK validates every payload against the registry before sending and never sends one that fails (it's shown as a local error). Gait's server enforces the same schema and rejects anything else, which is the real guarantee: anyone holding a connection key can call the API directly.
+- **You can see it first.** `--dry-run` prints exactly what would leave the process.
+
+These checks report configuration, not behavior, and Gait labels them as reported by your application, not verified by Gait.
+
+## Outcomes and results
+
+| Outcome | Result sent | Meaning |
+|---|---|---|
+| `ok` | PASS | The check passed. |
+| `fail` | FAIL | The check failed. Gait opens a finding for this check and application. |
+| `weak` | WARNING | Works, but should be stronger. |
+| `not_applicable` | INFORMATIONAL | Doesn't apply here (feature not installed, or an environment-gated check in `local`/`test`). Never counts as a pass. |
+| `unknown` | INFORMATIONAL | Couldn't be determined. |
+| `error` | INFORMATIONAL | The check raised an exception. Its facts are empty; the other checks still run. |
+
+**Environment gating.** Checks marked *gated* below report `not_applicable` with no facts when the environment is `local` or `test`, because a development machine is expected to run with DEBUG on and without HTTPS.
+
+## The Django pack
+
+Severity is what a failure means for the finding Gait opens.
+
+| Check id | Severity | Gated | What it checks |
+|---|---|---|---|
+| `CHK.DJANGO.DEBUG_OFF` | High | yes | DEBUG is off |
+| `CHK.DJANGO.ALLOWED_HOSTS` | Medium | yes | ALLOWED_HOSTS is an explicit allow-list |
+| `CHK.DJANGO.SIGNING_KEY_STRENGTH` | High | no | SECRET_KEY is strong |
+| `CHK.DJANGO.SIGNING_KEY_FALLBACKS` | Medium | no | Old signing keys are strong and few |
+| `CHK.DJANGO.DB_CREDENTIALS_SET` | High | yes | Network databases require credentials |
+| `CHK.DJANGO.SECURITY_MIDDLEWARE` | High | no | SecurityMiddleware is enabled |
+| `CHK.DJANGO.CSRF_MIDDLEWARE` | High | no | CSRF protection is enabled |
+| `CHK.DJANGO.CLICKJACKING` | Medium | no | Pages can't be framed by other sites |
+| `CHK.DJANGO.SSL_REDIRECT` | High | yes | HTTP is redirected to HTTPS |
+| `CHK.DJANGO.HSTS` | Medium | yes | HSTS is set for at least a year |
+| `CHK.DJANGO.NOSNIFF` | Low | no | Browsers don't guess content types |
+| `CHK.DJANGO.SESSION_COOKIE_FLAGS` | High | yes | Session cookies are Secure and HttpOnly |
+| `CHK.DJANGO.CSRF_COOKIE_SECURE` | Medium | yes | The CSRF cookie is Secure |
+| `CHK.DJANGO.REFERRER_POLICY` | Low | no | A referrer policy is set |
+| `CHK.DJANGO.COOP` | Low | no | A cross-origin opener policy is set |
+| `CHK.DJANGO.CORS_NOT_WILDCARD` | High | no | CORS isn't open to every origin |
+| `CHK.DJANGO.ADMIN_URL` | Low | no | The Django admin isn't at `/admin/` |
+| `CHK.DJANGO.DRF_DEFAULT_DENY` | High | no | Django REST framework denies by default |
+| `CHK.DJANGO.PASSWORD_POLICY` | Medium | no | Password rules are strong |
+| `CHK.DJANGO.DB_TLS` | High | yes | Database connections use TLS |
+| `CHK.DJANGO.EMAIL_TLS` | Medium | yes | Outgoing email uses TLS |
+
+### CHK.DJANGO.DEBUG_OFF
+- **Facts:** `debug`.
+- **PASS** when `DEBUG` is False. **FAIL** when True.
+- **Fix:** set `DEBUG = False` in every deployed environment. Read it from the environment and default to False.
+
+### CHK.DJANGO.ALLOWED_HOSTS
+- **Facts:** `host_count`, `wildcard`.
+- **PASS** when `ALLOWED_HOSTS` is non-empty and has no `"*"`. **FAIL** when it is empty or contains `"*"`.
+- **Fix:** list your real host names; never use `"*"`.
+
+### CHK.DJANGO.SIGNING_KEY_STRENGTH
+- **Facts:** `length`, `unique_chars`, `insecure_prefix` (starts with `django-insecure-`), `placeholder` (the whole value is a known placeholder such as `changeme`, `secret`, `dev`, `test`, `insecure`, `replace-me`). The key itself is never sent.
+- **PASS** when the key is at least 50 characters, has at least 5 distinct characters, has no `django-insecure-` prefix, and isn't a placeholder. **FAIL** otherwise.
+- **Fix:** generate a random key of at least 50 characters (`django.core.management.utils.get_random_secret_key()`), keep it out of source control, and load it from the environment.
+
+### CHK.DJANGO.SIGNING_KEY_FALLBACKS
+- **Facts:** `fallback_count`, `weak_fallbacks` (how many `SECRET_KEY_FALLBACKS` fail the strength rule above).
+- **PASS** when no fallback is weak and there are at most 2. **WARNING** when none is weak but there are more than 2. **FAIL** when any is weak.
+- **Fix:** keep at most two fallbacks during a rotation, make each one strong, and remove them once sessions have rolled over.
+
+### CHK.DJANGO.DB_CREDENTIALS_SET
+- **Facts:** `network_databases` (DATABASES entries that aren't SQLite and whose HOST isn't empty, `localhost`, `127.0.0.1`, `::1` or a socket path starting with `/`), `missing_credentials` (those with an empty USER or PASSWORD).
+- **PASS** when none is missing credentials. **FAIL** otherwise. **Not applicable** with no network databases.
+- **Fix:** give every network database connection a user and a strong password loaded from the environment.
+
+### CHK.DJANGO.SECURITY_MIDDLEWARE
+- **Facts:** `present`.
+- **PASS** when `django.middleware.security.SecurityMiddleware` is in `MIDDLEWARE`. **FAIL** otherwise. Without it, the HSTS, nosniff, referrer-policy, COOP and SSL-redirect settings have no effect.
+- **Fix:** add it near the top of `MIDDLEWARE`.
+
+### CHK.DJANGO.CSRF_MIDDLEWARE
+- **Facts:** `present`.
+- **PASS** when `django.middleware.csrf.CsrfViewMiddleware` is in `MIDDLEWARE`. **FAIL** otherwise.
+- **Fix:** keep it in `MIDDLEWARE`.
+
+### CHK.DJANGO.CLICKJACKING
+- **Facts:** `middleware_present` (XFrameOptionsMiddleware), `frame_option` (`DENY`, `SAMEORIGIN`, `unset` or `other`; Django's default is `DENY`).
+- **PASS** with the middleware and `DENY`. **WARNING** with the middleware and `SAMEORIGIN` (or another value). **FAIL** without the middleware.
+- **Fix:** enable `django.middleware.clickjacking.XFrameOptionsMiddleware` and set `X_FRAME_OPTIONS = "DENY"`.
+
+### CHK.DJANGO.SSL_REDIRECT
+- **Facts:** `ssl_redirect`, `proxy_header_set` (`SECURE_PROXY_SSL_HEADER` is set).
+- **PASS** when `SECURE_SSL_REDIRECT` is True. **FAIL** otherwise.
+- **Fix:** set `SECURE_SSL_REDIRECT = True`, and `SECURE_PROXY_SSL_HEADER` if you run behind a TLS-terminating proxy (Heroku, a load balancer).
+
+### CHK.DJANGO.HSTS
+- **Facts:** `hsts_seconds`, `include_subdomains`, `preload`.
+- **PASS** when `SECURE_HSTS_SECONDS` is at least 31536000 (one year). **WARNING** when it is above 0 but shorter. **FAIL** when it is 0.
+- **Fix:** once HTTPS works everywhere, set `SECURE_HSTS_SECONDS = 31536000`. Add `SECURE_HSTS_INCLUDE_SUBDOMAINS` only when every subdomain serves HTTPS.
+
+### CHK.DJANGO.NOSNIFF
+- **Facts:** `nosniff`.
+- **PASS** when `SECURE_CONTENT_TYPE_NOSNIFF` is True (Django's default). **FAIL** otherwise.
+- **Fix:** set `SECURE_CONTENT_TYPE_NOSNIFF = True`.
+
+### CHK.DJANGO.SESSION_COOKIE_FLAGS
+- **Facts:** `session_secure`, `session_httponly`.
+- **PASS** when both `SESSION_COOKIE_SECURE` and `SESSION_COOKIE_HTTPONLY` are True. **FAIL** otherwise.
+- **Fix:** set `SESSION_COOKIE_SECURE = True` and `SESSION_COOKIE_HTTPONLY = True`.
+
+### CHK.DJANGO.CSRF_COOKIE_SECURE
+- **Facts:** `csrf_secure`.
+- **PASS** when `CSRF_COOKIE_SECURE` is True. **FAIL** otherwise.
+- **Fix:** set `CSRF_COOKIE_SECURE = True`.
+
+### CHK.DJANGO.REFERRER_POLICY
+- **Facts:** `policy` (the first value of `SECURE_REFERRER_POLICY`; `unset`, or `other` for an unknown value).
+- **PASS** for `no-referrer`, `same-origin`, `strict-origin`, `strict-origin-when-cross-origin`, `origin`, `origin-when-cross-origin`. **WARNING** when unset, `unsafe-url`, `no-referrer-when-downgrade` or unknown.
+- **Fix:** set `SECURE_REFERRER_POLICY = "same-origin"` (or `"strict-origin-when-cross-origin"`).
+
+### CHK.DJANGO.COOP
+- **Facts:** `policy` (`SECURE_CROSS_ORIGIN_OPENER_POLICY`).
+- **PASS** for `same-origin` and `same-origin-allow-popups`. **WARNING** for `unsafe-none`, unset, or anything else.
+- **Fix:** set `SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"`.
+
+### CHK.DJANGO.CORS_NOT_WILDCARD
+- **Facts:** `cors_installed` (`corsheaders` in `INSTALLED_APPS`), `allow_all` (`CORS_ALLOW_ALL_ORIGINS` or the older `CORS_ORIGIN_ALLOW_ALL`), `catch_all_regex` (a `CORS_ALLOWED_ORIGIN_REGEXES` entry of `.*`, `^.*$`, `.+`, `^.+$` or `^https?://.*$`), `allow_credentials`.
+- **FAIL** when allow-all or a catch-all regex is combined with credentials. **WARNING** for allow-all or a catch-all without credentials. **PASS** otherwise. **Not applicable** without django-cors-headers.
+- **Fix:** list exact origins in `CORS_ALLOWED_ORIGINS`; never combine allow-all or a catch-all regex with credentials.
+
+### CHK.DJANGO.ADMIN_URL
+- **Facts:** `admin_installed`, `default_path` (`/admin/` resolves to the Django admin).
+- **PASS** when the admin is mounted elsewhere. **WARNING** when it's at `/admin/`. **Not applicable** without `django.contrib.admin`.
+- **Fix:** mount the admin at a less guessable path. This only reduces automated noise; the admin still needs strong sign-in.
+
+### CHK.DJANGO.DRF_DEFAULT_DENY
+- **Facts:** `drf_installed`, `classes_set` (`DEFAULT_PERMISSION_CLASSES` is in `REST_FRAMEWORK`), `default_allow_any` (not set, empty, or includes `AllowAny`; DRF's own default is `AllowAny`).
+- **PASS** when the default is not allow-any. **FAIL** otherwise. **Not applicable** without `rest_framework`.
+- **Fix:** set `REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"]` to `IsAuthenticated` (or stricter) and open endpoints one at a time.
+
+### CHK.DJANGO.PASSWORD_POLICY
+- **Facts:** `validator_count`, `min_length` (from `MinimumLengthValidator`'s `min_length`, 8 when the validator has no option, 0 without the validator), `common_list_check`, `numeric_check`, `similarity_check`.
+- **PASS** with a minimum of at least 12 and the common-password check. **WARNING** with a minimum of 8 to 11 and the common-password check. **FAIL** otherwise.
+- **Fix:** enable Django's validators with `MinimumLengthValidator` `min_length` of at least 12 and `CommonPasswordValidator`.
+
+### CHK.DJANGO.DB_TLS
+- **Facts:** `network_databases` (network PostgreSQL databases, same "network" rule as above), `tls_required` (those whose `OPTIONS["sslmode"]` is `require`, `verify-ca` or `verify-full`).
+- **PASS** when all require TLS. **FAIL** otherwise. **Not applicable** with no network PostgreSQL databases.
+- **Fix:** set `OPTIONS = {"sslmode": "require"}` (or `verify-full`) on every network PostgreSQL database. With `dj-database-url`, pass `ssl_require=True`.
+
+### CHK.DJANGO.EMAIL_TLS
+- **Facts:** `smtp_backend` (`EMAIL_BACKEND` is Django's SMTP backend, the default), `tls` (`EMAIL_USE_TLS` or `EMAIL_USE_SSL`).
+- **PASS** with TLS. **FAIL** without. **Not applicable** with a non-SMTP backend.
+- **Fix:** set `EMAIL_USE_TLS = True` (port 587) or `EMAIL_USE_SSL = True` (port 465).
+
+## Django's own deployment checks
+
+The pack also runs `django.core.checks.run_checks(include_deployment_checks=True, tags=["security"])` (what `manage.py check --deploy` reports) and attaches each returned id to the matching check as its `django_ids` fact. These are supporting facts only: the pack's own rule always decides the outcome. Only the id is kept, never the message text.
+
+Mapping, from Django 4.2 through 5.2:
+
+| Django id | Check |
+|---|---|
+| `security.W001` | SECURITY_MIDDLEWARE |
+| `security.W002`, `security.W019` | CLICKJACKING |
+| `security.W003` | CSRF_MIDDLEWARE |
+| `security.W004`, `security.W005`, `security.W021` | HSTS |
+| `security.W006` | NOSNIFF |
+| `security.W008` | SSL_REDIRECT |
+| `security.W009` | SIGNING_KEY_STRENGTH |
+| `security.W010` - `security.W015` | SESSION_COOKIE_FLAGS |
+| `security.W016` | CSRF_COOKIE_SECURE |
+| `security.W018` | DEBUG_OFF |
+| `security.W020` | ALLOWED_HOSTS |
+| `security.W022`, `security.E023` | REFERRER_POLICY |
+| `security.E024` | COOP |
+| `security.W025` | SIGNING_KEY_FALLBACKS |
+
+`security.W007` and `security.W017` were retired before Django 4.2. Any other id (`security.E101`/`E102` for a broken `CSRF_FAILURE_VIEW`, or a third-party package's security check) is shown locally as "unmapped" in the table and the JSON report, and is never sent.
+
+## CI and scheduling
+
+Run the checks where your real configuration lives: the deployed environment's settings, with its own connection key.
+
+- **On every staging and production deploy**, as a release or post-deploy step:
+  ```bash
+  python manage.py gait_check --run-id "deploy:$GIT_SHA"
+  ```
+- **Daily in production** (Heroku Scheduler, cron or a Kubernetes CronJob), so drift shows up even without a deploy. Gait treats configuration evidence older than 7 days as stale.
+  ```bash
+  python manage.py gait_check --run-id "daily:$(date -u +%F)"
+  ```
+- **In CI**, gate the build without contacting Gait, using the settings your deploy will use:
+  ```bash
+  python manage.py gait_check --no-send --environment production --fail-on fail
+  ```
+- Use a **stable `--run-id` per job** (`ci:<sha>:<job>`). A retried job then re-sends the same source reference and Gait keeps the first result instead of recording the run twice.
+- **Never give fork or pull-request builds a production connection key.** Use `--no-send` there.
+- Review what leaves your system with `--dry-run` before you first send, and after upgrading gait-sdk.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Nothing at or above `--fail-on`. |
+| 1 | At least one result at or above `--fail-on`. With `--fail-on-unknown`, also any `unknown` or `error` outcome. |
+| 2 | Delivery failure: the key was rejected (401), Gait was unreachable after retries, Gait rejected at least one check (400), or a payload failed local validation. Takes precedence over 1. |
+| 3 | Usage or configuration error (bad flag, unknown pack or check id, no settings module, no connection key when sending), or `--environment` doesn't match the key's application. Nothing is sent. |

@@ -7,6 +7,20 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 > Note: entries below `0.3.9` were never backfilled here — see `git log` for the full history if you need it. The `[2.0.0]` entry that used to sit at the top of this file was from a legacy versioning scheme (the package was briefly renamed `gait_integration` and back) and didn't correspond to any real tag; removed for accuracy.
 
+## 0.6.0 (unreleased)
+
+Built-in check packs (CHK2a). The package version is `0.6.0.dev0` until release.
+
+### Added
+- **Django check pack v1.0.0** (`gait_sdk.checks`): 21 checks against your Django settings (DEBUG, ALLOWED_HOSTS, SECRET_KEY strength and fallbacks, database credentials and TLS, security/CSRF/clickjacking middleware, HTTPS redirect, HSTS, nosniff, session and CSRF cookie flags, referrer and opener policies, CORS, admin path, DRF default permissions, password rules, email TLS). Each check is its own signal type (`CHK.DJANGO.*`) and its own control in Gait. Every check, rule and fix: `docs/CHECKS.md`.
+- **`python manage.py gait_check`** and the **`gait-check`** command (`[project.scripts]`), with `--dry-run`, `--no-send`, `--json`, `--fail-on`, `--fail-on-unknown`, `--run-id`, `--only`/`--skip` and `--environment` (an assertion; the environment comes from the connection key's application). Exit codes: 0 clean, 1 threshold reached, 2 delivery failure, 3 usage error or environment mismatch.
+- **The check registry**, `gait_sdk/checks/checks_v1.json` (shipped as package data), shared byte for byte with the Gait server and pinned by a canonical hash. `validate_payload()` enforces the same schema as the server: typed facts only (booleans, bounded integers, fixed choices, pattern-checked Django ids), no free text, at most 4 KB, and a `result` that matches the outcome. The SDK never sends a payload that fails it. `python -m gait_sdk.checks.registry --export-json` prints the registry.
+- Django's own `check --deploy` security ids are attached to the matching check as supporting facts (`django_ids`); ids with no matching check are shown locally and never sent.
+- Delivery retries: only when Gait is unreachable, up to three retries after 1, 2 and 4 seconds with the same `source_reference`. 400 and 401 are never retried; a 400 on one check doesn't stop the others.
+
+### Security
+- No setting value, request data or database data is ever sent. The SECRET_KEY and fallback keys are only measured (length, distinct characters, known prefix, known placeholder), never copied, logged or printed; tests assert the key appears in no payload, output or log.
+
 ## [Unreleased]
 
 Documentation only. No code changes.

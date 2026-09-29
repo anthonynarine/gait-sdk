@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gait-sdk"
-version = "0.5.1"
+version = "0.6.0.dev0"
 description = "Official Python SDK for Gait: verify Gait identities (local JWKS or introspection) in Django and FastAPI, with live session checks, application identity, and security signals."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -55,6 +55,9 @@ dependencies = [
     # pulls in `cryptography`, which PyJWT needs for RS256.
     "PyJWT[crypto] >=2.10.1",
 ]
+
+[project.scripts]
+gait-check = "gait_sdk.checks.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/anthonynarine/gait-sdk"
@@ -109,6 +112,10 @@ include = ["gait_sdk*", "auth_integration"]
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+# checks_v1.json is the check registry, shared byte for byte with the Gait server.
+gait_sdk = ["checks/*.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

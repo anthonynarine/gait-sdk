@@ -89,6 +89,25 @@ asyncio.run(send_security_signal(
 
 The key alone decides which application, workspace and environment the result belongs to. A FAIL opens a finding; a later PASS closes it. Details: [Connecting your software](https://gaitobservatory.com/docs/connecting-your-software) and the [signal contract](https://github.com/anthonynarine/gait-sdk/blob/main/gait_sdk/docs/security_signals.md).
 
+## Built-in checks *(0.6.0, unreleased)*
+
+gait-sdk ships ready-made checks, so you don't have to write your own. The Django pack runs 21 checks against your settings: DEBUG, ALLOWED_HOSTS, SECRET_KEY strength, HTTPS redirect, HSTS, secure cookies, CSRF, clickjacking, CORS, DRF default permissions, password rules, database and email TLS, and more. Each check reports to Gait as its own control, so a failing check opens its own finding and a later pass closes exactly that one.
+
+```bash
+# Inside a Django project ("gait_sdk" in INSTALLED_APPS)
+python manage.py gait_check --dry-run      # see exactly what would be sent; needs no key
+python manage.py gait_check                # run and report to Gait
+
+# Or without manage.py
+gait-check --pack django --settings mysite.settings --run-id "ci:$GIT_SHA:$JOB_ID"
+```
+
+- **What's sent:** per check, an outcome and a few typed facts (booleans, bounded numbers, fixed choices). Never a setting value, never the SECRET_KEY, never request or database data. `--dry-run` prints every payload before you send anything.
+- **Environment:** comes from the connection key's application. `--environment` only asserts it (exit 3 on a mismatch). DEBUG, HTTPS and cookie checks report "not applicable" for `local` and `test` applications.
+- **Exit codes:** 0 clean, 1 a result at or above `--fail-on` (default `fail`), 2 delivery failed, 3 usage or configuration error. Use `--no-send` to gate CI without contacting Gait.
+
+Every check, its rules and how to fix it: [docs/CHECKS.md](https://github.com/anthonynarine/gait-sdk/blob/main/docs/CHECKS.md).
+
 ## Quick start: verify users *(early access)*
 
 ### Django REST Framework
@@ -265,6 +284,7 @@ Details: [Integration guide](https://github.com/anthonynarine/gait-sdk/blob/main
 | | |
 |---|---|
 | [Gait docs](https://gaitobservatory.com/docs) | Gait itself: workspaces, applications and connection keys, security checks and findings, [gait-sdk](https://gaitobservatory.com/docs/gait-sdk) |
+| [Built-in checks](https://github.com/anthonynarine/gait-sdk/blob/main/docs/CHECKS.md) | Every check in the Django pack: what it checks, pass/fail rules, how to fix it, what's sent, CI and scheduling |
 | [Concepts](https://github.com/anthonynarine/gait-sdk/blob/main/docs/CONCEPTS.md) | Tokens, signatures, JWKS, revocation, 401/403/503, explained for newcomers |
 | [Examples](https://github.com/anthonynarine/gait-sdk/tree/main/examples) | Runnable FastAPI + Django apps with a local stand-in issuer |
 | [Architecture](https://github.com/anthonynarine/gait-sdk/blob/main/docs/ARCHITECTURE.md) | The boundary, components, verification & caching, trust model |
