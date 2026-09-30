@@ -92,7 +92,7 @@ Severity is what a failure means for the finding Gait opens.
 |---|---|---|---|
 | `CHK.DJANGO.DEBUG_OFF` | High | yes | DEBUG is off |
 | `CHK.DJANGO.ALLOWED_HOSTS` | Medium | yes | ALLOWED_HOSTS is an explicit allow-list |
-| `CHK.DJANGO.SIGNING_KEY_STRENGTH` | High | no | SECRET_KEY is strong |
+| `CHK.DJANGO.SIGNING_KEY_STRENGTH` | High | no | The Django signing key is strong |
 | `CHK.DJANGO.SIGNING_KEY_FALLBACKS` | Medium | no | Old signing keys are strong and few |
 | `CHK.DJANGO.DB_CREDENTIALS_SET` | High | yes | Network databases require credentials |
 | `CHK.DJANGO.SECURITY_MIDDLEWARE` | High | no | SecurityMiddleware is enabled |

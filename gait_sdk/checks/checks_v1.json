@@ -28,8 +28,8 @@
     },
     "CHK.DJANGO.SIGNING_KEY_STRENGTH": {
       "pack": "django", "severity": "HIGH", "env_gated": false,
-      "title": "Django SECRET_KEY is strong",
-      "remediation": "Generate a random SECRET_KEY of at least 50 characters (e.g. django.core.management.utils.get_random_secret_key), keep it out of source control, and load it from the environment.",
+      "title": "The Django signing key is strong",
+      "remediation": "Generate a random signing key of at least 50 characters (e.g. django.core.management.utils.get_random_secret_key), keep it out of source control, and load it from the environment.",
       "facts": {
         "length": {"type": "int", "min": 0, "max": 100000},
         "unique_chars": {"type": "int", "min": 0, "max": 100000},
@@ -40,7 +40,7 @@
     "CHK.DJANGO.SIGNING_KEY_FALLBACKS": {
       "pack": "django", "severity": "MEDIUM", "env_gated": false,
       "title": "Old Django signing keys are strong and few",
-      "remediation": "Keep at most two SECRET_KEY_FALLBACKS during a rotation, make each one strong, and remove them once sessions have rolled over.",
+      "remediation": "Keep at most two old signing keys (Django's key fallbacks setting) during a rotation, make each one strong, and remove them once sessions have rolled over.",
       "facts": {"fallback_count": {"type": "int", "min": 0, "max": 100}, "weak_fallbacks": {"type": "int", "min": 0, "max": 100}}
     },
     "CHK.DJANGO.DB_CREDENTIALS_SET": {

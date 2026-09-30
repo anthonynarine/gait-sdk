@@ -33,7 +33,7 @@ SPEC_FILENAME = "checks_v1.json"
 
 # sha256 of json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8").
 # Independent of line endings; the server asserts the same value.
-CHECKS_V1_CANONICAL_SHA256 = "8fd7af39a4cdb8d39289754d1cb593c6e1876a650d43dadd8b0c226c9206f62b"
+CHECKS_V1_CANONICAL_SHA256 = "27613d8d0987dfc586d3cc3a790071ccc659d222b811e4db873b6672ae6268d3"
 
 PAYLOAD_VERSION = 1
 PAYLOAD_KEYS = frozenset({"v", "pack", "pack_version", "sdk_version", "outcome", "facts"})

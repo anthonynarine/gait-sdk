@@ -51,7 +51,7 @@ def test_packaged_spec_matches_the_canonical_hash_shared_with_the_server():
     spec = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
     canonical = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8")
     assert hashlib.sha256(canonical).hexdigest() == registry.CHECKS_V1_CANONICAL_SHA256
-    assert registry.CHECKS_V1_CANONICAL_SHA256 == "8fd7af39a4cdb8d39289754d1cb593c6e1876a650d43dadd8b0c226c9206f62b"
+    assert registry.CHECKS_V1_CANONICAL_SHA256 == "27613d8d0987dfc586d3cc3a790071ccc659d222b811e4db873b6672ae6268d3"
 
 
 def test_a_drifted_spec_refuses_to_load(monkeypatch):
