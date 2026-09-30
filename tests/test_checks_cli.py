@@ -13,7 +13,14 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 
-from tests._checks_support import SECRET_KEY, FakeGait, SleepRecorder, django_settings, install_fake_gait
+from tests._checks_support import (
+    SECRET_KEY,
+    FakeGait,
+    SleepRecorder,
+    django_settings,
+    fake_deps,
+    install_fake_gait,
+)
 
 from gait_sdk.checks import cli, registry
 from gait_sdk.exceptions import SecuritySignalRejected
@@ -168,7 +175,8 @@ def test_exit_3_on_environment_mismatch(monkeypatch):
     "argv",
     [
         ["--pack", "fastapi"],
-        ["--pack", "django", "--pack", "deps"],
+        ["--pack", "hipaa"],
+        ["--pack", "django", "--deps-tool", "trivy"],
         ["--environment", "moon"],
         ["--fail-on", "sometimes"],
         ["--only", "CHK.DJANGO.NOPE"],
@@ -217,25 +225,44 @@ def test_table_output(monkeypatch):
 # --- Management command ----------------------------------------------------------------------
 def test_management_command_dry_run(monkeypatch):
     fake = install_fake_gait(monkeypatch, FakeGait(), credential=None)
+    fake_deps(monkeypatch)
     out = io.StringIO()
     with django_settings():
         call_command(Command(), "--dry-run", "--json", stdout=out)
     data = json.loads(out.getvalue())
-    assert len(data["results"]) == len(ALL)
+    # django + deps by default
+    assert [r["id"] for r in data["results"]] == list(ALL) + ["CHK.DEPS.KNOWN_VULNS"]
     assert fake.sent == []
+
+
+def test_management_command_rejects_the_fastapi_pack(monkeypatch):
+    install_fake_gait(monkeypatch, FakeGait(), credential=None)
+    with django_settings(), pytest.raises(SystemExit) as exc:
+        call_command(Command(), "--pack", "fastapi", "--dry-run", stdout=io.StringIO(), stderr=io.StringIO())
+    assert exc.value.code == 3
+
+
+def test_management_command_django_pack_only(monkeypatch):
+    install_fake_gait(monkeypatch, FakeGait(), credential=None)
+    out = io.StringIO()
+    with django_settings():
+        call_command(Command(), "--pack", "django", "--dry-run", "--json", stdout=out)
+    assert [r["id"] for r in json.loads(out.getvalue())["results"]] == list(ALL)
 
 
 def test_management_command_sends_and_exits_with_the_same_codes(monkeypatch):
     fake = install_fake_gait(monkeypatch, FakeGait())
+    fake_deps(monkeypatch)
     with django_settings(DEBUG=True), pytest.raises(SystemExit) as exc:
         call_command(Command(), "--run-id", "ci:m:1", stdout=io.StringIO())
     assert exc.value.code == 1
-    assert len(fake.sent) == len(ALL)
+    assert len(fake.sent) == len(ALL) + 1
     assert {c["source_reference"] for c in fake.sent} == {"ci:m:1"}
 
 
 def test_management_command_environment_mismatch(monkeypatch):
     install_fake_gait(monkeypatch, FakeGait(environment="ci"))
+    fake_deps(monkeypatch)
     with django_settings(), pytest.raises(SystemExit) as exc:
         call_command(Command(), "--environment", "production", stdout=io.StringIO(), stderr=io.StringIO())
     assert exc.value.code == 3
@@ -297,7 +324,7 @@ def test_cli_with_unimportable_settings_is_a_usage_error():
 
 def test_manage_py_style_command_no_send():
     proc = subprocess.run(
-        [sys.executable, "-m", "django", "gait_check", "--settings", "tests.checks_settings",
+        [sys.executable, "-m", "django", "gait_check", "--settings", "tests.checks_settings", "--pack", "django",
          "--no-send", "--environment", "local", "--json"],
         capture_output=True, cwd=str(ROOT), env=_env(), timeout=120,
     )

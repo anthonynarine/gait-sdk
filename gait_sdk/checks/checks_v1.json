@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
-  "outcomes": ["ok", "fail", "weak", "not_applicable", "unknown", "error"],
+  "outcomes": [
+    "ok",
+    "fail",
+    "weak",
+    "not_applicable",
+    "unknown",
+    "error"
+  ],
   "outcome_results": {
     "ok": "PASS",
     "fail": "FAIL",
@@ -10,140 +17,557 @@
     "error": "INFORMATIONAL"
   },
   "common_facts": {
-    "django_ids": {"type": "list_pattern", "pattern": "^[a-z_]{1,20}\\.[EW][0-9]{3}$", "max_items": 25}
+    "django_ids": {
+      "type": "list_pattern",
+      "pattern": "^[a-z_]{1,20}\\.[EW][0-9]{3}$",
+      "max_items": 25
+    }
   },
-  "limits": {"max_payload_bytes": 4096, "max_total_keys": 100, "max_list_items": 25, "source_reference_pattern": "^[A-Za-z0-9:._-]{1,128}$"},
+  "limits": {
+    "max_payload_bytes": 4096,
+    "max_total_keys": 100,
+    "max_list_items": 25,
+    "source_reference_pattern": "^[A-Za-z0-9:._-]{1,128}$",
+    "max_record_items": 10
+  },
   "checks": {
     "CHK.DJANGO.DEBUG_OFF": {
-      "pack": "django", "severity": "HIGH", "env_gated": true,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": true,
       "title": "Django DEBUG is off",
       "remediation": "Set DEBUG = False in every deployed environment (read it from the environment, default False).",
-      "facts": {"debug": {"type": "bool"}}
+      "facts": {
+        "debug": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.ALLOWED_HOSTS": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": true,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": true,
       "title": "Django ALLOWED_HOSTS is an explicit allow-list",
       "remediation": "List your real host names in ALLOWED_HOSTS; never use '*'.",
-      "facts": {"host_count": {"type": "int", "min": 0, "max": 1000}, "wildcard": {"type": "bool"}}
+      "facts": {
+        "host_count": {
+          "type": "int",
+          "min": 0,
+          "max": 1000
+        },
+        "wildcard": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.SIGNING_KEY_STRENGTH": {
-      "pack": "django", "severity": "HIGH", "env_gated": false,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": false,
       "title": "The Django signing key is strong",
       "remediation": "Generate a random signing key of at least 50 characters (e.g. django.core.management.utils.get_random_secret_key), keep it out of source control, and load it from the environment.",
       "facts": {
-        "length": {"type": "int", "min": 0, "max": 100000},
-        "unique_chars": {"type": "int", "min": 0, "max": 100000},
-        "insecure_prefix": {"type": "bool"},
-        "placeholder": {"type": "bool"}
-      }
+        "length": {
+          "type": "int",
+          "min": 0,
+          "max": 100000
+        },
+        "unique_chars": {
+          "type": "int",
+          "min": 0,
+          "max": 100000
+        },
+        "insecure_prefix": {
+          "type": "bool"
+        },
+        "placeholder": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.SIGNING_KEY_FALLBACKS": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": false,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": false,
       "title": "Old Django signing keys are strong and few",
       "remediation": "Keep at most two old signing keys (Django's key fallbacks setting) during a rotation, make each one strong, and remove them once sessions have rolled over.",
-      "facts": {"fallback_count": {"type": "int", "min": 0, "max": 100}, "weak_fallbacks": {"type": "int", "min": 0, "max": 100}}
+      "facts": {
+        "fallback_count": {
+          "type": "int",
+          "min": 0,
+          "max": 100
+        },
+        "weak_fallbacks": {
+          "type": "int",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.DB_CREDENTIALS_SET": {
-      "pack": "django", "severity": "HIGH", "env_gated": true,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": true,
       "title": "Network databases require credentials",
       "remediation": "Give every network database connection a user and a strong credential loaded from the environment.",
-      "facts": {"network_databases": {"type": "int", "min": 0, "max": 50}, "missing_credentials": {"type": "int", "min": 0, "max": 50}}
+      "facts": {
+        "network_databases": {
+          "type": "int",
+          "min": 0,
+          "max": 50
+        },
+        "missing_credentials": {
+          "type": "int",
+          "min": 0,
+          "max": 50
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.SECURITY_MIDDLEWARE": {
-      "pack": "django", "severity": "HIGH", "env_gated": false,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": false,
       "title": "Django SecurityMiddleware is enabled",
       "remediation": "Add django.middleware.security.SecurityMiddleware near the top of MIDDLEWARE.",
-      "facts": {"present": {"type": "bool"}}
+      "facts": {
+        "present": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.CSRF_MIDDLEWARE": {
-      "pack": "django", "severity": "HIGH", "env_gated": false,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": false,
       "title": "Django CSRF protection is enabled",
       "remediation": "Keep django.middleware.csrf.CsrfViewMiddleware in MIDDLEWARE.",
-      "facts": {"present": {"type": "bool"}}
+      "facts": {
+        "present": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.CLICKJACKING": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": false,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": false,
       "title": "Pages can't be framed by other sites",
       "remediation": "Enable XFrameOptionsMiddleware and set X_FRAME_OPTIONS = 'DENY'.",
-      "facts": {"middleware_present": {"type": "bool"}, "frame_option": {"type": "enum", "values": ["DENY", "SAMEORIGIN", "unset", "other"]}}
+      "facts": {
+        "middleware_present": {
+          "type": "bool"
+        },
+        "frame_option": {
+          "type": "enum",
+          "values": [
+            "DENY",
+            "SAMEORIGIN",
+            "unset",
+            "other"
+          ]
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.SSL_REDIRECT": {
-      "pack": "django", "severity": "HIGH", "env_gated": true,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": true,
       "title": "HTTP is redirected to HTTPS",
       "remediation": "Set SECURE_SSL_REDIRECT = True (and SECURE_PROXY_SSL_HEADER if you run behind a TLS-terminating proxy).",
-      "facts": {"ssl_redirect": {"type": "bool"}, "proxy_header_set": {"type": "bool"}}
+      "facts": {
+        "ssl_redirect": {
+          "type": "bool"
+        },
+        "proxy_header_set": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.HSTS": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": true,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": true,
       "title": "HSTS is set for at least a year",
       "remediation": "Set SECURE_HSTS_SECONDS = 31536000 once HTTPS works everywhere; add includeSubDomains only when every subdomain serves HTTPS.",
-      "facts": {"hsts_seconds": {"type": "int", "min": 0, "max": 1000000000}, "include_subdomains": {"type": "bool"}, "preload": {"type": "bool"}}
+      "facts": {
+        "hsts_seconds": {
+          "type": "int",
+          "min": 0,
+          "max": 1000000000
+        },
+        "include_subdomains": {
+          "type": "bool"
+        },
+        "preload": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.NOSNIFF": {
-      "pack": "django", "severity": "LOW", "env_gated": false,
+      "pack": "django",
+      "severity": "LOW",
+      "env_gated": false,
       "title": "Browsers don't guess content types",
       "remediation": "Set SECURE_CONTENT_TYPE_NOSNIFF = True.",
-      "facts": {"nosniff": {"type": "bool"}}
+      "facts": {
+        "nosniff": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.SESSION_COOKIE_FLAGS": {
-      "pack": "django", "severity": "HIGH", "env_gated": true,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": true,
       "title": "Session cookies are Secure and HttpOnly",
       "remediation": "Set SESSION_COOKIE_SECURE = True and SESSION_COOKIE_HTTPONLY = True.",
-      "facts": {"session_secure": {"type": "bool"}, "session_httponly": {"type": "bool"}}
+      "facts": {
+        "session_secure": {
+          "type": "bool"
+        },
+        "session_httponly": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.CSRF_COOKIE_SECURE": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": true,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": true,
       "title": "The CSRF cookie is Secure",
       "remediation": "Set CSRF_COOKIE_SECURE = True.",
-      "facts": {"csrf_secure": {"type": "bool"}}
+      "facts": {
+        "csrf_secure": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.REFERRER_POLICY": {
-      "pack": "django", "severity": "LOW", "env_gated": false,
+      "pack": "django",
+      "severity": "LOW",
+      "env_gated": false,
       "title": "A referrer policy is set",
       "remediation": "Set SECURE_REFERRER_POLICY = 'same-origin' (or 'strict-origin-when-cross-origin').",
-      "facts": {"policy": {"type": "enum", "values": ["no-referrer", "no-referrer-when-downgrade", "origin", "origin-when-cross-origin", "same-origin", "strict-origin", "strict-origin-when-cross-origin", "unsafe-url", "unset", "other"]}}
+      "facts": {
+        "policy": {
+          "type": "enum",
+          "values": [
+            "no-referrer",
+            "no-referrer-when-downgrade",
+            "origin",
+            "origin-when-cross-origin",
+            "same-origin",
+            "strict-origin",
+            "strict-origin-when-cross-origin",
+            "unsafe-url",
+            "unset",
+            "other"
+          ]
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.COOP": {
-      "pack": "django", "severity": "LOW", "env_gated": false,
+      "pack": "django",
+      "severity": "LOW",
+      "env_gated": false,
       "title": "A cross-origin opener policy is set",
       "remediation": "Set SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'.",
-      "facts": {"policy": {"type": "enum", "values": ["same-origin", "same-origin-allow-popups", "unsafe-none", "unset", "other"]}}
+      "facts": {
+        "policy": {
+          "type": "enum",
+          "values": [
+            "same-origin",
+            "same-origin-allow-popups",
+            "unsafe-none",
+            "unset",
+            "other"
+          ]
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.CORS_NOT_WILDCARD": {
-      "pack": "django", "severity": "HIGH", "env_gated": false,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": false,
       "title": "CORS isn't open to every origin",
       "remediation": "List exact origins in CORS_ALLOWED_ORIGINS; don't combine CORS_ALLOW_ALL_ORIGINS or a catch-all regex with credentials.",
-      "facts": {"cors_installed": {"type": "bool"}, "allow_all": {"type": "bool"}, "catch_all_regex": {"type": "bool"}, "allow_credentials": {"type": "bool"}}
+      "facts": {
+        "cors_installed": {
+          "type": "bool"
+        },
+        "allow_all": {
+          "type": "bool"
+        },
+        "catch_all_regex": {
+          "type": "bool"
+        },
+        "allow_credentials": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.ADMIN_URL": {
-      "pack": "django", "severity": "LOW", "env_gated": false,
+      "pack": "django",
+      "severity": "LOW",
+      "env_gated": false,
       "title": "The Django admin isn't at /admin/",
       "remediation": "Mount the admin at a less guessable path (this only reduces noise; the admin still needs strong sign-in).",
-      "facts": {"admin_installed": {"type": "bool"}, "default_path": {"type": "bool"}}
+      "facts": {
+        "admin_installed": {
+          "type": "bool"
+        },
+        "default_path": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.DRF_DEFAULT_DENY": {
-      "pack": "django", "severity": "HIGH", "env_gated": false,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": false,
       "title": "Django REST framework denies by default",
       "remediation": "Set REST_FRAMEWORK['DEFAULT_PERMISSION_CLASSES'] to IsAuthenticated (or stricter) and open endpoints one by one.",
-      "facts": {"drf_installed": {"type": "bool"}, "classes_set": {"type": "bool"}, "default_allow_any": {"type": "bool"}}
+      "facts": {
+        "drf_installed": {
+          "type": "bool"
+        },
+        "classes_set": {
+          "type": "bool"
+        },
+        "default_allow_any": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.PASSWORD_POLICY": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": false,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": false,
       "title": "Password rules are strong",
       "remediation": "Enable Django's password validators with MinimumLengthValidator min_length >= 12 and CommonPasswordValidator.",
-      "facts": {"validator_count": {"type": "int", "min": 0, "max": 50}, "min_length": {"type": "int", "min": 0, "max": 1000}, "common_list_check": {"type": "bool"}, "numeric_check": {"type": "bool"}, "similarity_check": {"type": "bool"}}
+      "facts": {
+        "validator_count": {
+          "type": "int",
+          "min": 0,
+          "max": 50
+        },
+        "min_length": {
+          "type": "int",
+          "min": 0,
+          "max": 1000
+        },
+        "common_list_check": {
+          "type": "bool"
+        },
+        "numeric_check": {
+          "type": "bool"
+        },
+        "similarity_check": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.DB_TLS": {
-      "pack": "django", "severity": "HIGH", "env_gated": true,
+      "pack": "django",
+      "severity": "HIGH",
+      "env_gated": true,
       "title": "Database connections use TLS",
       "remediation": "Set OPTIONS sslmode to 'require' (or verify-full) for every network PostgreSQL database.",
-      "facts": {"network_databases": {"type": "int", "min": 0, "max": 50}, "tls_required": {"type": "int", "min": 0, "max": 50}}
+      "facts": {
+        "network_databases": {
+          "type": "int",
+          "min": 0,
+          "max": 50
+        },
+        "tls_required": {
+          "type": "int",
+          "min": 0,
+          "max": 50
+        }
+      },
+      "valid_for_seconds": 604800
     },
     "CHK.DJANGO.EMAIL_TLS": {
-      "pack": "django", "severity": "MEDIUM", "env_gated": true,
+      "pack": "django",
+      "severity": "MEDIUM",
+      "env_gated": true,
       "title": "Outgoing email uses TLS",
       "remediation": "With the SMTP backend, set EMAIL_USE_TLS = True (port 587) or EMAIL_USE_SSL = True (port 465).",
-      "facts": {"smtp_backend": {"type": "bool"}, "tls": {"type": "bool"}}
+      "facts": {
+        "smtp_backend": {
+          "type": "bool"
+        },
+        "tls": {
+          "type": "bool"
+        }
+      },
+      "valid_for_seconds": 604800
+    },
+    "CHK.FASTAPI.DEBUG_OFF": {
+      "pack": "fastapi",
+      "severity": "HIGH",
+      "env_gated": true,
+      "valid_for_seconds": 604800,
+      "title": "FastAPI debug mode is off",
+      "remediation": "Create the app with FastAPI(debug=False) in every deployed environment (read the flag from the environment, default False).",
+      "facts": {
+        "debug": {
+          "type": "bool"
+        }
+      }
+    },
+    "CHK.FASTAPI.DOCS_HIDDEN": {
+      "pack": "fastapi",
+      "severity": "LOW",
+      "env_gated": true,
+      "valid_for_seconds": 604800,
+      "title": "API docs aren't public in production",
+      "remediation": "In production pass docs_url=None, redoc_url=None and openapi_url=None to FastAPI(), or put the docs behind authentication.",
+      "facts": {
+        "docs_url_set": {
+          "type": "bool"
+        },
+        "redoc_url_set": {
+          "type": "bool"
+        },
+        "openapi_url_set": {
+          "type": "bool"
+        }
+      }
+    },
+    "CHK.FASTAPI.CORS_NOT_WILDCARD": {
+      "pack": "fastapi",
+      "severity": "HIGH",
+      "env_gated": false,
+      "valid_for_seconds": 604800,
+      "title": "CORS isn't open to every origin",
+      "remediation": "List exact origins in CORSMiddleware(allow_origins=[...]); don't combine '*' or a catch-all allow_origin_regex with allow_credentials=True.",
+      "facts": {
+        "cors_installed": {
+          "type": "bool"
+        },
+        "allow_all": {
+          "type": "bool"
+        },
+        "catch_all_regex": {
+          "type": "bool"
+        },
+        "allow_credentials": {
+          "type": "bool"
+        }
+      }
+    },
+    "CHK.FASTAPI.TRUSTED_HOST": {
+      "pack": "fastapi",
+      "severity": "MEDIUM",
+      "env_gated": true,
+      "valid_for_seconds": 604800,
+      "title": "Requests are limited to your own host names",
+      "remediation": "Add TrustedHostMiddleware(allowed_hosts=[...]) with your real host names, without '*'.",
+      "facts": {
+        "trusted_host_installed": {
+          "type": "bool"
+        },
+        "wildcard": {
+          "type": "bool"
+        }
+      }
+    },
+    "CHK.FASTAPI.HTTPS_REDIRECT": {
+      "pack": "fastapi",
+      "severity": "MEDIUM",
+      "env_gated": true,
+      "valid_for_seconds": 604800,
+      "title": "HTTP is redirected to HTTPS",
+      "remediation": "Add HTTPSRedirectMiddleware, or confirm your proxy or load balancer redirects HTTP to HTTPS.",
+      "facts": {
+        "https_redirect_installed": {
+          "type": "bool"
+        }
+      }
+    },
+    "CHK.DEPS.KNOWN_VULNS": {
+      "pack": "deps",
+      "severity": "HIGH",
+      "env_gated": false,
+      "valid_for_seconds": 172800,
+      "title": "No known-vulnerable Python packages",
+      "remediation": "Upgrade each listed package to its fixed version (pip install -U <package>) and redeploy; for advisories with no fix yet, check the advisory for a workaround.",
+      "facts": {
+        "tool": {
+          "type": "enum",
+          "values": [
+            "pip-audit",
+            "osv-scanner",
+            "none"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "values": [
+            "tool_missing",
+            "timeout",
+            "unparseable",
+            "network"
+          ]
+        },
+        "vulnerable_count": {
+          "type": "int",
+          "min": 0,
+          "max": 10000
+        },
+        "unfixed_count": {
+          "type": "int",
+          "min": 0,
+          "max": 10000
+        },
+        "items": {
+          "type": "list_record",
+          "max_items": 10,
+          "required": [
+            "package",
+            "version",
+            "advisory_id"
+          ],
+          "fields": {
+            "package": {
+              "type": "pattern",
+              "pattern": "^[A-Za-z0-9._-]{1,100}$"
+            },
+            "version": {
+              "type": "pattern",
+              "pattern": "^[0-9A-Za-z.+!-]{1,50}$"
+            },
+            "advisory_id": {
+              "type": "pattern",
+              "pattern": "^(PYSEC|GHSA|CVE|OSV)-[A-Za-z0-9-]{1,40}$"
+            },
+            "fixed_in": {
+              "type": "pattern",
+              "pattern": "^[0-9A-Za-z.+!-]{1,50}$"
+            }
+          }
+        }
+      }
     }
   }
 }

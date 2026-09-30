@@ -44,14 +44,17 @@ def test_registry_loads_from_package_data():
     raw = registry.spec_bytes()
     assert raw == SPEC_PATH.read_bytes()
     assert len(registry.check_ids("django")) == 21
-    assert registry.packs() == ("django",)
+    assert len(registry.check_ids("fastapi")) == 5
+    assert registry.check_ids("deps") == ("CHK.DEPS.KNOWN_VULNS",)
+    assert len(registry.check_ids()) == 27
+    assert registry.packs() == ("django", "fastapi", "deps")
 
 
 def test_packaged_spec_matches_the_canonical_hash_shared_with_the_server():
     spec = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
     canonical = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8")
     assert hashlib.sha256(canonical).hexdigest() == registry.CHECKS_V1_CANONICAL_SHA256
-    assert registry.CHECKS_V1_CANONICAL_SHA256 == "1a5f4cd13fe5cb17eef336e12b96cf52e2fbeb7875bb6a97dd8474417a343e1d"
+    assert registry.CHECKS_V1_CANONICAL_SHA256 == "29c9ebe147246de7c02e89c7d91c55d2a700af49bb3cb6c95776489e52b8aebf"
 
 
 def test_a_drifted_spec_refuses_to_load(monkeypatch):

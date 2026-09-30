@@ -2,9 +2,11 @@
 
     gait-check --pack django --settings mysite.settings --dry-run
     gait-check --pack django --settings mysite.settings --run-id ci:$SHA:$JOB
+    gait-check --pack fastapi --app mypackage.main:app --pack deps
 
 `python manage.py gait_check` takes the same flags (Django's own --settings
-applies there) and shares this code.
+applies there; no --app, and it runs the django and deps packs by default)
+and shares this code.
 
 Exit codes:
     0  nothing at or above --fail-on
@@ -26,7 +28,11 @@ from typing import Any, Callable, Optional, Sequence, TextIO
 
 from gait_sdk.checks import engine
 
-AVAILABLE_PACKS = ("django",)
+AVAILABLE_PACKS = engine.AVAILABLE_PACKS
+CLI_DEFAULT_PACKS = ("django",)
+# manage.py gait_check: the app is already the Django project, so FastAPI doesn't apply.
+MANAGEMENT_PACKS = ("django", "deps")
+DEPS_TOOLS = ("pip-audit", "osv-scanner")
 
 
 class _UsageExit(Exception):
@@ -40,16 +46,34 @@ class _Parser(argparse.ArgumentParser):
         raise _UsageExit(message)
 
 
-def add_arguments(parser: argparse.ArgumentParser, *, include_settings: bool = True) -> None:
-    parser.add_argument(
-        "--pack", action="append", dest="packs", metavar="PACK",
-        help="Check pack to run (repeatable). Available: django. Default: django.",
-    )
+def add_arguments(parser: argparse.ArgumentParser, *, include_settings: bool = True, management: bool = False) -> None:
+    if management:
+        pack_help = "Check pack to run (repeatable): django, deps. Default: both."
+    else:
+        pack_help = "Check pack to run (repeatable): django, fastapi, deps. Default: django."
+    parser.add_argument("--pack", action="append", dest="packs", metavar="PACK", help=pack_help)
     if include_settings:
         parser.add_argument(
             "--settings", dest="settings_module", metavar="MODULE",
             help="Django settings module (sets DJANGO_SETTINGS_MODULE, then django.setup()).",
         )
+    if not management:
+        parser.add_argument(
+            "--app", metavar="MODULE:ATTR",
+            help="The FastAPI app for --pack fastapi, e.g. mypackage.main:app. Imported only; never started.",
+        )
+    parser.add_argument(
+        "--strict", action="store_true",
+        help="Stricter rules where a check has them (FastAPI docs exposed in production: FAIL instead of WARNING).",
+    )
+    parser.add_argument(
+        "--deps-tool", choices=DEPS_TOOLS, default="pip-audit",
+        help="Scanner for --pack deps (default: pip-audit).",
+    )
+    parser.add_argument(
+        "--no-batch", action="store_true",
+        help="Send one request per check even if Gait supports batches.",
+    )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Run the checks and print the exact payloads that would be sent. Sends nothing; needs no credential.",
@@ -96,9 +120,17 @@ def _facts_text(facts: dict[str, Any]) -> str:
         if isinstance(value, bool):
             value = "yes" if value else "no"
         elif isinstance(value, list):
-            value = ",".join(str(v) for v in value) or "-"
+            value = ",".join(_record_text(v) if isinstance(v, dict) else str(v) for v in value) or "-"
         parts.append(f"{name}={value}")
     return " ".join(parts)
+
+
+def _record_text(record: dict[str, Any]) -> str:
+    """e.g. pip==23.1.2:PYSEC-2023-228(fix 23.3) for a deps item."""
+    text = f"{record.get('package', '?')}=={record.get('version', '?')}:{record.get('advisory_id', '?')}"
+    if record.get("fixed_in"):
+        text += f"(fix {record['fixed_in']})"
+    return text
 
 
 def _status(report: engine.RunReport, item: engine.CheckResult) -> str:
@@ -134,7 +166,7 @@ def render_table(report: engine.RunReport, out: TextIO, *, dry_run: bool) -> Non
     if report.delivery_error:
         out.write(f"Delivery failed: {report.delivery_error}\n")
     if dry_run:
-        out.write("\nPayloads that would be sent (one POST each):\n")
+        out.write("\nSignals that would be sent (batched when Gait supports it):\n")
         for body in report.request_bodies():
             out.write(json.dumps(body, sort_keys=False) + "\n")
 
@@ -158,15 +190,21 @@ def run(
     out: TextIO,
     err: TextIO,
     sleep: Callable[[float], None] = time.sleep,
+    allowed_packs: Sequence[str] = AVAILABLE_PACKS,
+    default_packs: Sequence[str] = CLI_DEFAULT_PACKS,
 ) -> int:
     """Run with parsed options (shared by the CLI and the management command)."""
     dry_run = bool(options.get("dry_run"))
     send = not (dry_run or options.get("no_send"))
     try:
-        packs = list(options.get("packs") or ["django"])
+        packs = list(dict.fromkeys(options.get("packs") or default_packs))
         for pack in packs:
-            if pack not in AVAILABLE_PACKS:
-                raise engine.UsageError(f"Unknown or unsupported pack: {pack!r} (available: django).")
+            if pack not in allowed_packs:
+                raise engine.UsageError(
+                    f"Unknown or unsupported pack here: {pack!r} (available: {', '.join(allowed_packs)})."
+                )
+        if "fastapi" in packs and not options.get("app"):
+            raise engine.UsageError("--pack fastapi needs --app package.module:app.")
         report = engine.execute(
             packs=packs,
             environment=options.get("environment"),
@@ -175,6 +213,10 @@ def run(
             only=options.get("only"),
             skip=options.get("skip"),
             sleep=sleep,
+            strict=bool(options.get("strict")),
+            app=options.get("app"),
+            deps_tool=options.get("deps_tool") or "pip-audit",
+            batch=not options.get("no_batch"),
         )
         code = engine.exit_code(report, options.get("fail_on") or "fail", bool(options.get("fail_on_unknown")))
     except engine.UsageError as exc:
@@ -229,10 +271,10 @@ def main(
         err.write(f"gait-check: {exc}\n")
         return engine.EXIT_USAGE
     options = vars(args)
-    packs = options.get("packs") or ["django"]
+    packs = options.get("packs") or list(CLI_DEFAULT_PACKS)
     unknown = [p for p in packs if p not in AVAILABLE_PACKS]
     if unknown:
-        err.write(f"gait-check: unknown or unsupported pack {unknown[0]!r} (available: django)\n")
+        err.write(f"gait-check: unknown pack {unknown[0]!r} (available: {', '.join(AVAILABLE_PACKS)})\n")
         return engine.EXIT_USAGE
     if "django" in packs:
         try:

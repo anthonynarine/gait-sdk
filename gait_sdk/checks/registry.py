@@ -33,18 +33,20 @@ SPEC_FILENAME = "checks_v1.json"
 
 # sha256 of json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8").
 # Independent of line endings; the server asserts the same value.
-CHECKS_V1_CANONICAL_SHA256 = "1a5f4cd13fe5cb17eef336e12b96cf52e2fbeb7875bb6a97dd8474417a343e1d"
+CHECKS_V1_CANONICAL_SHA256 = "29c9ebe147246de7c02e89c7d91c55d2a700af49bb3cb6c95776489e52b8aebf"
 
 PAYLOAD_VERSION = 1
 PAYLOAD_KEYS = frozenset({"v", "pack", "pack_version", "sdk_version", "outcome", "facts"})
 
 # Pack versions this SDK builds payloads for.
-PACK_VERSIONS = MappingProxyType({"django": "1.0.0"})
+PACK_VERSIONS = MappingProxyType({"django": "1.0.0", "fastapi": "1.0.0", "deps": "1.0.0"})
 
 CHECK_ID_RE = re.compile(r"^CHK\.[A-Z]{2,20}\.[A-Z0-9_]{2,40}$")
 FACT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 VERSION_RE = re.compile(r"^[0-9A-Za-z.+-]{1,20}$")
-FACT_TYPES = frozenset({"bool", "int", "enum", "list_pattern"})
+FACT_TYPES = frozenset({"bool", "int", "enum", "pattern", "list_pattern", "list_record"})
+# Types a list_record field may have (no nested lists or records).
+RECORD_FIELD_TYPES = frozenset({"bool", "int", "enum", "pattern"})
 SEVERITIES = frozenset({"HIGH", "MEDIUM", "LOW"})
 
 # Gait's audit sanitiser redacts any metadata key containing one of these
@@ -99,6 +101,7 @@ class CheckDefinition:
     title: str
     remediation: str
     facts: Mapping[str, Mapping[str, Any]]
+    valid_for_seconds: Optional[int] = None
 
 
 # -----------------------------------------------------------------------------
@@ -139,16 +142,51 @@ def validate_spec(spec: Mapping[str, Any]) -> None:
             lowered = name.lower()
             if any(part in lowered for part in SENSITIVE_FACT_NAME_PARTS):
                 raise SpecError(f"{check_id}: fact name {name!r} would be redacted by Gait's sanitiser.")
-            if fact["type"] not in FACT_TYPES:
-                raise SpecError(f"{check_id}: fact {name!r} has unknown type {fact['type']!r}.")
-            if fact["type"] == "int" and not (isinstance(fact.get("min"), int) and isinstance(fact.get("max"), int)):
-                raise SpecError(f"{check_id}: int fact {name!r} needs min and max.")
-            if fact["type"] == "enum" and not fact.get("values"):
-                raise SpecError(f"{check_id}: enum fact {name!r} needs values.")
-            if fact["type"] == "list_pattern":
-                re.compile(fact["pattern"])
-                if not 1 <= int(fact.get("max_items", 0)) <= limits["max_list_items"]:
-                    raise SpecError(f"{check_id}: list fact {name!r} needs 1..max_list_items items.")
+            _validate_fact_spec(f"{check_id}: fact {name!r}", fact, limits, FACT_TYPES)
+        valid_for = check.get("valid_for_seconds")
+        if isinstance(valid_for, bool) or not isinstance(valid_for, int) or valid_for <= 0:
+            raise SpecError(f"{check_id}: valid_for_seconds must be a positive integer.")
+
+
+def _compile(where: str, pattern: Any) -> None:
+    if not isinstance(pattern, str) or not pattern:
+        raise SpecError(f"{where} needs a pattern.")
+    try:
+        re.compile(pattern)
+    except re.error:
+        raise SpecError(f"{where} has a pattern that doesn't compile.") from None
+
+
+def _validate_fact_spec(where: str, fact: Mapping[str, Any], limits: Mapping[str, Any], allowed: frozenset) -> None:
+    kind = fact.get("type")
+    if kind not in allowed:
+        raise SpecError(f"{where} has unknown or disallowed type {kind!r}.")
+    if kind == "int" and not (isinstance(fact.get("min"), int) and isinstance(fact.get("max"), int)):
+        raise SpecError(f"{where} needs min and max.")
+    if kind == "enum" and not fact.get("values"):
+        raise SpecError(f"{where} needs values.")
+    if kind == "pattern":
+        _compile(where, fact.get("pattern"))
+    if kind == "list_pattern":
+        _compile(where, fact.get("pattern"))
+        if not 1 <= int(fact.get("max_items", 0)) <= limits["max_list_items"]:
+            raise SpecError(f"{where} needs 1..max_list_items items.")
+    if kind == "list_record":
+        max_record = limits.get("max_record_items")
+        if not isinstance(max_record, int) or not 1 <= int(fact.get("max_items", 0)) <= max_record:
+            raise SpecError(f"{where} needs 1..max_record_items items.")
+        fields = fact.get("fields")
+        if not isinstance(fields, dict) or not fields:
+            raise SpecError(f"{where} needs fields.")
+        required = fact.get("required", [])
+        if not isinstance(required, list) or not set(required) <= set(fields):
+            raise SpecError(f"{where}: required must be a subset of fields.")
+        for field_name, field_spec in fields.items():
+            if not FACT_NAME_RE.match(field_name):
+                raise SpecError(f"{where}: bad field name {field_name!r}.")
+            if any(part in field_name.lower() for part in SENSITIVE_FACT_NAME_PARTS):
+                raise SpecError(f"{where}: field name {field_name!r} would be redacted by Gait's sanitiser.")
+            _validate_fact_spec(f"{where} field {field_name!r}", field_spec, limits, RECORD_FIELD_TYPES)
 
 
 @lru_cache(maxsize=1)
@@ -177,6 +215,7 @@ def checks() -> Mapping[str, CheckDefinition]:
                 title=check["title"],
                 remediation=check["remediation"],
                 facts=MappingProxyType(dict(check["facts"])),
+                valid_for_seconds=check.get("valid_for_seconds"),
             )
             for check_id, check in spec["checks"].items()
         }
@@ -247,6 +286,28 @@ def _check_fact(field: str, fact: Mapping[str, Any], value: Any) -> None:
         for item in value:
             if not isinstance(item, str) or not pattern.fullmatch(item):
                 raise PayloadValidationError(field)
+    elif kind == "pattern":
+        if not isinstance(value, str) or not re.fullmatch(fact["pattern"], value):
+            raise PayloadValidationError(field)
+    elif kind == "list_record":
+        max_items = min(fact["max_items"], limits()["max_record_items"])
+        if not isinstance(value, list) or len(value) > max_items:
+            raise PayloadValidationError(field)
+        fields = fact["fields"]
+        required = fact.get("required", [])
+        for index, record in enumerate(value):
+            where = f"{field}.{index}"
+            if not isinstance(record, dict):
+                raise PayloadValidationError(field)
+            for key in record:
+                if key not in fields:
+                    # Only echo a key that looks like a field name; never arbitrary text.
+                    raise PayloadValidationError(f"{where}.{key}" if FACT_NAME_RE.match(str(key)) else field)
+            for key in required:
+                if key not in record:
+                    raise PayloadValidationError(f"{where}.{key}")
+            for key, item in record.items():
+                _check_fact(f"{where}.{key}", fields[key], item)
     else:  # pragma: no cover - validate_spec rejects unknown types
         raise PayloadValidationError(field)
 

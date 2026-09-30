@@ -108,6 +108,8 @@ from gait_sdk.exceptions import (
     AuthServiceUnavailable,
     InvalidApplicationCredentialError,
     SecuritySignalRejected,
+    SignalEndpointNotFound,
+    SignalRateLimited,
 )
 from gait_sdk.settings import GAIT_APPLICATION_CREDENTIAL, GAIT_AUTH_URL, GAIT_TIMEOUT
 
@@ -308,3 +310,175 @@ async def send_security_signal(
 
     logger.error("Unexpected status %s from Gait during signal submission.", response.status_code)
     raise AuthServiceUnavailable(f"Unexpected response: {response.status_code}")
+
+
+# -----------------------------------------------------------------------------
+# Batch submission and the accepted-types endpoint (0.6.0)
+# -----------------------------------------------------------------------------
+# Newer Gait servers accept up to `batch_max` signals in one all-or-nothing
+# POST, and list the signal types they accept. Older servers answer 404 on
+# both; callers (gait_sdk.checks.engine) then fall back to one
+# send_security_signal() per signal. Same credential header, same logging
+# rules: never the credential, never a payload.
+BATCH_PATH = "/security/tenant-signals/batch/"
+TYPES_PATH = "/security/tenant-signals/types/"
+
+_SAFE_FIELD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")
+
+
+@dataclass(frozen=True)
+class SignalTypesInfo:
+    """What this Gait server accepts (GET .../tenant-signals/types/)."""
+
+    signal_types: tuple
+    check_spec_version: Optional[int]
+    check_spec_sha256: Optional[str]
+    batch_max: Optional[int]
+
+
+def _endpoint(path: str) -> str:
+    if not GAIT_AUTH_URL:
+        logger.error("Missing GAIT_AUTH_URL - cannot contact Gait.")
+        raise AuthServiceUnavailable("Authentication service misconfigured.")
+    return f"{GAIT_AUTH_URL.rstrip('/')}{path}"
+
+
+def _credential_headers(credential: Optional[str]) -> dict:
+    raw_credential = credential if credential is not None else GAIT_APPLICATION_CREDENTIAL
+    if not raw_credential:
+        logger.error("No application credential configured or provided.")
+        raise InvalidApplicationCredentialError("Application credential is not configured.")
+    return {APPLICATION_CREDENTIAL_HEADER: raw_credential}
+
+
+def _json_or_none(response: Any) -> Any:
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
+def _parse_retry_after(value: Any) -> Optional[float]:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    return seconds if seconds >= 0 else None
+
+
+def _safe_field(value: Any) -> Optional[str]:
+    """Only echo a server-supplied field name that looks like one."""
+    if isinstance(value, str) and 0 < len(value) <= 100 and set(value) <= _SAFE_FIELD_CHARS:
+        return value
+    return None
+
+
+def _rejected_from(body: Any) -> SecuritySignalRejected:
+    exc = SecuritySignalRejected("Invalid tenant security signal.")
+    body = body if isinstance(body, dict) else {}
+    code = body.get("code")
+    index = body.get("index")
+    exc.code_name = code if code in {"PAYLOAD_SCHEMA", "BATCH_INVALID"} else None
+    exc.index = index if isinstance(index, int) and not isinstance(index, bool) and index >= 0 else None
+    exc.field = _safe_field(body.get("field"))
+    return exc
+
+
+async def get_signal_types(credential: Optional[str] = None) -> SignalTypesInfo:
+    """GET the signal types this Gait server accepts.
+
+    Raises:
+        SignalEndpointNotFound: the server predates this endpoint (404).
+        InvalidApplicationCredentialError: 401, or no credential configured.
+        AuthServiceUnavailable: unreachable, unexpected status or malformed body.
+    """
+    headers = _credential_headers(credential)
+    url = _endpoint(TYPES_PATH)
+    try:
+        async with httpx.AsyncClient(timeout=GAIT_TIMEOUT) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.RequestError:
+        logger.error("Gait signal-types API unreachable.")
+        raise AuthServiceUnavailable("Authentication service unreachable.")
+
+    if response.status_code == 404:
+        raise SignalEndpointNotFound()
+    if response.status_code == 401:
+        raise InvalidApplicationCredentialError("Invalid application credential.")
+    if response.status_code != 200:
+        raise AuthServiceUnavailable(f"Unexpected response: {response.status_code}")
+
+    raw = _json_or_none(response)
+    types = raw.get("signal_types") if isinstance(raw, dict) else None
+    if not isinstance(types, list) or not all(isinstance(t, str) for t in types):
+        raise AuthServiceUnavailable("Malformed response from authentication service.")
+    batch_max = raw.get("batch_max")
+    if isinstance(batch_max, bool) or not isinstance(batch_max, int) or batch_max < 1:
+        batch_max = None
+    version = raw.get("check_spec_version")
+    digest = raw.get("check_spec_sha256")
+    return SignalTypesInfo(
+        signal_types=tuple(types),
+        check_spec_version=version if isinstance(version, int) and not isinstance(version, bool) else None,
+        check_spec_sha256=digest if isinstance(digest, str) else None,
+        batch_max=batch_max,
+    )
+
+
+async def send_security_signals_batch(signals: list, credential: Optional[str] = None) -> list:
+    """POST several signals in one all-or-nothing request.
+
+    Args:
+        signals: dicts with exactly `signal_type`, `result`,
+            `source_reference` and `payload` (the single endpoint's body).
+
+    Returns:
+        One SecuritySignalResult per signal, in order.
+
+    Raises:
+        SignalEndpointNotFound: the server has no batch endpoint (404).
+        SecuritySignalRejected: 400. Nothing in the batch was recorded. Has
+            `code_name` ("PAYLOAD_SCHEMA" / "BATCH_INVALID"), `index` and
+            `field` when the server named them.
+        SignalRateLimited: 429, with `retry_after` seconds when given.
+        InvalidApplicationCredentialError: 401, or no credential configured.
+        AuthServiceUnavailable: unreachable, unexpected status or malformed body.
+    """
+    if not isinstance(signals, list) or not signals:
+        raise SecuritySignalRejected("signals must be a non-empty list.")
+    for item in signals:
+        if not isinstance(item, dict) or set(item) != {"signal_type", "result", "source_reference", "payload"}:
+            raise SecuritySignalRejected("Each signal needs exactly signal_type, result, source_reference, payload.")
+        _validate_local_input(item["signal_type"], item["result"], item["source_reference"], item["payload"])
+
+    headers = _credential_headers(credential)
+    url = _endpoint(BATCH_PATH)
+    logger.info("Submitting %d tenant security signals in one batch.", len(signals))
+    try:
+        async with httpx.AsyncClient(timeout=GAIT_TIMEOUT) as client:
+            response = await client.post(url, headers=headers, json={"signals": signals})
+    except httpx.RequestError:
+        logger.error("Gait tenant-signal batch API unreachable.")
+        raise AuthServiceUnavailable("Authentication service unreachable.")
+
+    status = response.status_code
+    if status == 201:
+        raw = _json_or_none(response)
+        results = raw.get("results") if isinstance(raw, dict) else None
+        if not isinstance(results, list) or len(results) != len(signals):
+            raise AuthServiceUnavailable("Malformed response from authentication service.")
+        return [_build_result(item) for item in results]
+    if status == 404:
+        raise SignalEndpointNotFound()
+    if status == 401:
+        logger.warning("Application credential rejected by Gait during batch submission.")
+        raise InvalidApplicationCredentialError("Invalid application credential.")
+    if status == 400:
+        logger.warning("Tenant security signal batch rejected by Gait.")
+        raise _rejected_from(_json_or_none(response))
+    if status == 429:
+        response_headers = getattr(response, "headers", None) or {}
+        logger.warning("Tenant security signal batch rate-limited by Gait.")
+        raise SignalRateLimited(retry_after=_parse_retry_after(response_headers.get("Retry-After")))
+    logger.error("Unexpected status %s from Gait during batch submission.", status)
+    raise AuthServiceUnavailable(f"Unexpected response: {status}")

@@ -13,21 +13,29 @@ Flow:
 3. Build one payload per check and validate it with
    `registry.validate_payload` BEFORE anything is sent. An invalid payload
    is never sent; it is reported as a local error.
-4. Send each result as its own signal (signal_type = check id,
-   source_reference = run id). Only `AuthServiceUnavailable` is retried,
-   with the same source_reference (the server is idempotent on
-   (application, signal_type, source_reference)). 400 and 401 are never
-   retried. A 400 on one check doesn't stop the others.
+4. Deliver (source_reference = run id):
+   - GET the server's accepted signal types once. Checks the server doesn't
+     accept are skipped locally ("not supported by this Gait server") and
+     don't fail the run. If that call is unavailable or 404 (older
+     servers), everything is sent.
+   - With a `batch_max`, send chunks of at most that many in one
+     all-or-nothing POST each. A 404 on the batch endpoint, no
+     `batch_max`, or `--no-batch` means one POST per check
+     (`send_security_signal`).
+   - Only `AuthServiceUnavailable` is retried, with the same
+     source_reference (the server is idempotent on (application,
+     signal_type, source_reference)). 400 and 401 are never retried. A 400
+     on one check (or one chunk) doesn't stop the others. A 429 on a batch
+     waits Retry-After (at most 60 s) once and retries once.
 
 Nothing here ever logs or prints a setting value.
 """
 
 from __future__ import annotations
 
-import re
-
 import asyncio
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -40,7 +48,11 @@ logger = logging.getLogger("gait_sdk.checks")
 # Retry delays (seconds) after an AuthServiceUnavailable: one first attempt,
 # then up to three retries after 1, 2 and 4 seconds.
 RETRY_DELAYS: tuple[float, ...] = (1, 2, 4)
+# The longest a 429's Retry-After is honoured, once.
+MAX_RATE_LIMIT_WAIT = 60.0
+DEFAULT_RATE_LIMIT_WAIT = 1.0
 
+AVAILABLE_PACKS = ("django", "fastapi", "deps")
 VALID_ENVIRONMENTS = ("local", "test", "ci", "staging", "production")
 GATED_ENVIRONMENTS = frozenset({"local", "test"})
 DEFAULT_OFFLINE_ENVIRONMENT = "production"
@@ -50,6 +62,8 @@ EXIT_OK = 0
 EXIT_THRESHOLD = 1
 EXIT_DELIVERY = 2
 EXIT_USAGE = 3
+
+NOT_SUPPORTED = "not sent: not supported by this Gait server"
 
 _THRESHOLDS = {
     "fail": frozenset({"FAIL"}),
@@ -71,6 +85,17 @@ class DeliveryError(Exception):
 
 
 @dataclass
+class PackContext:
+    """Per-run inputs the packs may need."""
+
+    environment: str
+    strict: bool = False
+    app_path: Optional[str] = None
+    app: Any = None
+    deps_tool: str = "pip-audit"
+
+
+@dataclass
 class CheckResult:
     check_id: str
     outcome: str
@@ -80,6 +105,7 @@ class CheckResult:
     error: Optional[str] = None
     payload: Optional[dict[str, Any]] = None
     valid: bool = True
+    supported: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -113,7 +139,7 @@ class RunReport:
         }
 
     def request_bodies(self) -> list[dict[str, Any]]:
-        """The exact request bodies that would be (or were) POSTed."""
+        """The exact signals that would be (or were) sent."""
         return [signal_body(r, self.run_id) for r in self.results if r.valid and r.payload is not None]
 
 
@@ -136,7 +162,15 @@ def pack_module(pack: str):
         from gait_sdk.checks import django_pack
 
         return django_pack
-    raise UsageError(f"Unknown or unsupported pack: {pack!r} (available: django).")
+    if pack == "fastapi":
+        from gait_sdk.checks import fastapi_pack
+
+        return fastapi_pack
+    if pack == "deps":
+        from gait_sdk.checks import deps_pack
+
+        return deps_pack
+    raise UsageError(f"Unknown pack: {pack!r} (available: {', '.join(AVAILABLE_PACKS)}).")
 
 
 def select_check_ids(
@@ -192,16 +226,35 @@ def signal_body(result: CheckResult, run_id: str) -> dict[str, Any]:
 # -----------------------------------------------------------------------------
 # Running checks
 # -----------------------------------------------------------------------------
+def _call_check(module: Any, check_id: str, ctx: PackContext):
+    runner = getattr(module, "run_check", None)
+    if runner is not None:
+        return runner(check_id, ctx)
+    return module.CHECKS[check_id]()
+
+
+def prepare_packs(packs: Sequence[str], ctx: PackContext) -> None:
+    """Pack setup that can fail as a usage error (e.g. a bad --app), before any network call."""
+    for pack in packs:
+        prepare = getattr(pack_module(pack), "prepare", None)
+        if prepare is not None:
+            prepare(ctx)
+
+
 def run_checks(
     packs: Sequence[str],
     environment: str,
     only: Optional[Iterable[str]] = None,
     skip: Optional[Iterable[str]] = None,
+    *,
+    context: Optional[PackContext] = None,
 ) -> tuple[list[CheckResult], list[str]]:
     """Run the selected checks and build a validated payload for each.
 
     Returns (results, unmapped Django ids).
     """
+    ctx = context or PackContext(environment=environment)
+    ctx.environment = environment
     selected = select_check_ids(packs, only, skip)
     gated = environment in GATED_ENVIRONMENTS
     results: list[CheckResult] = []
@@ -212,6 +265,9 @@ def run_checks(
         pack_ids = [cid for cid in selected if registry.get_check(cid).pack == pack]
         if not pack_ids:
             continue
+        prepare = getattr(module, "prepare", None)
+        if prepare is not None:
+            prepare(ctx)
         django_ids: dict[str, list[str]] = {}
         deploy = getattr(module, "deploy_check_ids", None)
         if deploy is not None:
@@ -226,7 +282,7 @@ def run_checks(
                 outcome, facts = "not_applicable", {}
             else:
                 try:
-                    outcome, facts = module.CHECKS[check_id]()
+                    outcome, facts = _call_check(module, check_id, ctx)
                     facts = dict(facts)
                     ids = django_ids.get(check_id) or []
                     if ids:
@@ -285,14 +341,47 @@ def resolve_application(credential: Optional[str], sleep: Callable[[float], None
         raise DeliveryError("Gait is unreachable (retries exhausted).") from None
 
 
-def deliver(
-    results: Sequence[CheckResult],
-    run_id: str,
-    *,
-    credential: Optional[str] = None,
-    sleep: Callable[[float], None] = time.sleep,
-) -> tuple[bool, Optional[str]]:
-    """Send each valid result as its own signal. Returns (failed, reason)."""
+def fetch_signal_types(credential: Optional[str], sleep: Callable[[float], None]):
+    """The server's accepted types, or None for an older server (404) or when unavailable."""
+    from gait_sdk import security
+    from gait_sdk.exceptions import (
+        AuthServiceUnavailable,
+        InvalidApplicationCredentialError,
+        SignalEndpointNotFound,
+    )
+
+    try:
+        info = _call_with_retry(lambda: asyncio.run(security.get_signal_types(credential)), sleep)
+    except (SignalEndpointNotFound, AuthServiceUnavailable):
+        logger.info("Gait didn't list its accepted check types; sending every check.")
+        return None
+    except InvalidApplicationCredentialError:
+        raise DeliveryError("The application credential was rejected (401).") from None
+    if info.check_spec_sha256 and info.check_spec_sha256 != registry.CHECKS_V1_CANONICAL_SHA256:
+        logger.warning("This Gait server uses a different check spec; unsupported checks are skipped.")
+    return info
+
+
+class _Delivery:
+    """Mutable delivery state for one run."""
+
+    def __init__(self, run_id: str, credential: Optional[str], sleep: Callable[[float], None]):
+        self.run_id = run_id
+        self.credential = credential
+        self.sleep = sleep
+        self.failed = False
+        self.reason: Optional[str] = None
+        self.stop: Optional[str] = None
+
+    def fail(self, reason: str, *, stop: Optional[str] = None, override: bool = False) -> None:
+        self.failed = True
+        if override or self.reason is None:
+            self.reason = reason
+        if stop is not None:
+            self.stop = stop
+
+
+def _send_single(items: Sequence[CheckResult], state: _Delivery) -> None:
     from gait_sdk import security
     from gait_sdk.exceptions import (
         AuthServiceUnavailable,
@@ -300,15 +389,9 @@ def deliver(
         SecuritySignalRejected,
     )
 
-    failed = any(not r.valid for r in results)
-    reason: Optional[str] = "a payload failed local validation" if failed else None
-    stop: Optional[str] = None
-
-    for item in results:
-        if not item.valid:
-            continue
-        if stop is not None:
-            item.error = f"not sent: {stop}"
+    for item in items:
+        if state.stop is not None:
+            item.error = f"not sent: {state.stop}"
             continue
 
         def send(item: CheckResult = item) -> Any:
@@ -316,27 +399,123 @@ def deliver(
                 security.send_security_signal(
                     signal_type=item.check_id,
                     result=item.result,
-                    source_reference=run_id,
+                    source_reference=state.run_id,
                     payload=item.payload,
-                    credential=credential,
+                    credential=state.credential,
                 )
             )
 
         try:
-            _call_with_retry(send, sleep)
+            _call_with_retry(send, state.sleep)
             item.sent = True
         except SecuritySignalRejected:
             item.error = "rejected by Gait (400)"
-            failed, reason = True, reason or "Gait rejected at least one check (400)"
+            state.fail("Gait rejected at least one check (400)")
         except InvalidApplicationCredentialError:
             item.error = "credential rejected (401)"
-            failed, reason = True, "the application credential was rejected (401)"
-            stop = "credential rejected"
+            state.fail("the application credential was rejected (401)", stop="credential rejected", override=True)
         except AuthServiceUnavailable:
             item.error = "Gait unreachable after retries"
-            failed, reason = True, "Gait is unreachable (retries exhausted)"
-            stop = "Gait unreachable"
-    return failed, reason
+            state.fail("Gait is unreachable (retries exhausted)", stop="Gait unreachable", override=True)
+
+
+def _rejection_note(exc: Any, chunk: Sequence[CheckResult]) -> str:
+    index = getattr(exc, "index", None)
+    field_name = getattr(exc, "field", None)
+    parts = ["rejected by Gait (400)"]
+    if isinstance(index, int) and 0 <= index < len(chunk):
+        parts.append(f"batch item {index} ({chunk[index].check_id})")
+    if field_name:
+        parts.append(f"field {field_name}")
+    return ", ".join(parts)
+
+
+def _send_batches(items: Sequence[CheckResult], batch_max: int, state: _Delivery) -> None:
+    """Send in chunks; falls back to single POSTs if the server has no batch endpoint."""
+    from gait_sdk import security
+    from gait_sdk.exceptions import (
+        AuthServiceUnavailable,
+        InvalidApplicationCredentialError,
+        SecuritySignalRejected,
+        SignalEndpointNotFound,
+        SignalRateLimited,
+    )
+
+    pending = list(items)
+    while pending:
+        chunk, pending = pending[:batch_max], pending[batch_max:]
+        if state.stop is not None:
+            for item in chunk:
+                item.error = f"not sent: {state.stop}"
+            continue
+        bodies = [signal_body(item, state.run_id) for item in chunk]
+
+        def post(bodies: list = bodies) -> Any:
+            return asyncio.run(security.send_security_signals_batch(bodies, credential=state.credential))
+
+        try:
+            try:
+                _call_with_retry(post, state.sleep)
+            except SignalRateLimited as exc:
+                wait = exc.retry_after if exc.retry_after is not None else DEFAULT_RATE_LIMIT_WAIT
+                state.sleep(min(wait, MAX_RATE_LIMIT_WAIT))
+                _call_with_retry(post, state.sleep)
+            for item in chunk:
+                item.sent = True
+        except SignalEndpointNotFound:
+            logger.info("This Gait server has no batch endpoint; sending one check per request.")
+            _send_single(chunk + pending, state)
+            return
+        except SecuritySignalRejected as exc:
+            note = _rejection_note(exc, chunk)
+            for position, item in enumerate(chunk):
+                item.error = note if getattr(exc, "index", None) == position else "not sent: batch rejected (400)"
+            state.fail("Gait rejected a batch (400); nothing in that batch was recorded")
+        except SignalRateLimited:
+            for item in chunk:
+                item.error = "not sent: rate limited (429)"
+            state.fail("Gait rate-limited the run (429)", stop="rate limited", override=True)
+        except InvalidApplicationCredentialError:
+            for item in chunk:
+                item.error = "credential rejected (401)"
+            state.fail("the application credential was rejected (401)", stop="credential rejected", override=True)
+        except AuthServiceUnavailable:
+            for item in chunk:
+                item.error = "Gait unreachable after retries"
+            state.fail("Gait is unreachable (retries exhausted)", stop="Gait unreachable", override=True)
+
+
+def deliver(
+    results: Sequence[CheckResult],
+    run_id: str,
+    *,
+    credential: Optional[str] = None,
+    sleep: Callable[[float], None] = time.sleep,
+    batch: bool = True,
+) -> tuple[bool, Optional[str]]:
+    """Deliver every valid result. Returns (failed, reason)."""
+    state = _Delivery(run_id, credential, sleep)
+    if any(not r.valid for r in results):
+        state.fail("a payload failed local validation")
+
+    info = fetch_signal_types(credential, sleep)
+    sendable = []
+    for item in results:
+        if not item.valid:
+            continue
+        if info is not None and item.check_id not in info.signal_types:
+            item.supported = False
+            item.error = NOT_SUPPORTED
+            continue
+        sendable.append(item)
+
+    if not sendable:
+        return state.failed, state.reason
+    if batch and info is not None and info.batch_max:
+        _send_batches(sendable, info.batch_max, state)
+    else:
+        _send_single(sendable, state)
+    return state.failed, state.reason
 
 
 # -----------------------------------------------------------------------------
@@ -352,6 +531,11 @@ def execute(
     skip: Optional[Iterable[str]] = None,
     credential: Optional[str] = None,
     sleep: Callable[[float], None] = time.sleep,
+    strict: bool = False,
+    app: Optional[str] = None,
+    app_object: Any = None,
+    deps_tool: str = "pip-audit",
+    batch: bool = True,
 ) -> RunReport:
     """Run the packs and (when `send`) deliver the results.
 
@@ -372,6 +556,14 @@ def execute(
     if environment is not None and environment not in VALID_ENVIRONMENTS:
         raise UsageError(f"--environment must be one of: {', '.join(VALID_ENVIRONMENTS)}.")
     select_check_ids(packs, only, skip)  # fail on bad --only/--skip before any network call
+    ctx = PackContext(
+        environment=environment or DEFAULT_OFFLINE_ENVIRONMENT,
+        strict=strict,
+        app_path=app,
+        app=app_object,
+        deps_tool=deps_tool or "pip-audit",
+    )
+    prepare_packs(packs, ctx)  # e.g. a bad --app is a usage error, before any network call
 
     application_slug = None
     if send:
@@ -386,7 +578,7 @@ def execute(
     else:
         effective_env = environment or DEFAULT_OFFLINE_ENVIRONMENT
 
-    results, unmapped = run_checks(packs, effective_env, only, skip)
+    results, unmapped = run_checks(packs, effective_env, only, skip, context=ctx)
     report = RunReport(
         run_id=run_id,
         environment=effective_env,
@@ -396,7 +588,9 @@ def execute(
         send=send,
     )
     if send:
-        report.delivery_failed, report.delivery_error = deliver(results, run_id, credential=credential, sleep=sleep)
+        report.delivery_failed, report.delivery_error = deliver(
+            results, run_id, credential=credential, sleep=sleep, batch=batch
+        )
     elif any(not r.valid for r in results):
         report.delivery_failed, report.delivery_error = True, "a payload failed local validation"
     return report

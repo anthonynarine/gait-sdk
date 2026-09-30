@@ -100,6 +100,14 @@ fastapi = [
     "starlette >=0.27",
 ]
 
+# Install with `gait-sdk[deps]` for the dependency check pack
+# (`gait-check --pack deps`), which runs pip-audit. pip-audit looks your
+# installed package names and versions up on PyPI's vulnerability service;
+# Gait itself receives only the vulnerable packages, versions and advisory ids.
+deps = [
+    "pip-audit >=2.7",
+]
+
 # Install with `gait-sdk[test]` to run this package's own test suite.
 test = [
     "pytest >=7",

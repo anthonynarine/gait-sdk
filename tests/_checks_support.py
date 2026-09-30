@@ -48,6 +48,10 @@ class FakeGait:
         # check id -> list of exceptions to raise on successive attempts
         self.errors: dict[str, list[Exception]] = {}
         self.always: dict[str, Exception] = {}
+        self.types: Any = None
+        self.types_calls = 0
+        self.batches: list = []
+        self.batch_errors: list = []
 
     async def verify_application(self, credential: Optional[str] = None):
         from gait_sdk.application import ApplicationPrincipal
@@ -84,6 +88,48 @@ class FakeGait:
     def attempts(self, check_id: str) -> list[dict[str, Any]]:
         return [call for call in self.sent if call["signal_type"] == check_id]
 
+    # --- types + batch endpoints --------------------------------------------------
+    # Default: an older server without either endpoint (404), so delivery uses
+    # one send_security_signal() per check. Set `types` to a SignalTypesInfo
+    # (or an exception) to simulate a newer server.
+    def enable_batch(self, batch_max: int = 50, signal_types=None):
+        from gait_sdk.checks import registry
+        from gait_sdk.security import SignalTypesInfo
+
+        self.types = SignalTypesInfo(
+            signal_types=tuple(signal_types if signal_types is not None else registry.check_ids()),
+            check_spec_version=1,
+            check_spec_sha256=registry.CHECKS_V1_CANONICAL_SHA256,
+            batch_max=batch_max,
+        )
+        return self
+
+    async def get_signal_types(self, credential: Optional[str] = None):
+        from gait_sdk.exceptions import SignalEndpointNotFound
+
+        self.types_calls += 1
+        if self.types is None:
+            raise SignalEndpointNotFound()
+        if isinstance(self.types, list):
+            item = self.types.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+        if isinstance(self.types, Exception):
+            raise self.types
+        return self.types
+
+    async def send_security_signals_batch(self, signals, credential: Optional[str] = None):
+        from gait_sdk.security import SecuritySignalResult
+
+        self.batches.append([dict(s) for s in signals])
+        if self.batch_errors:
+            raise self.batch_errors.pop(0)
+        return [
+            SecuritySignalResult(signal_id=f"b-{i}", control_key="k", evidence_id=None, received_at="t")
+            for i, _ in enumerate(signals)
+        ]
+
 
 def install_fake_gait(monkeypatch, fake: FakeGait, credential: Optional[str] = "app-credential-value"):
     import gait_sdk.application as application
@@ -92,7 +138,16 @@ def install_fake_gait(monkeypatch, fake: FakeGait, credential: Optional[str] = "
     monkeypatch.setattr(application, "GAIT_APPLICATION_CREDENTIAL", credential)
     monkeypatch.setattr(application, "verify_application", fake.verify_application)
     monkeypatch.setattr(security, "send_security_signal", fake.send_security_signal)
+    monkeypatch.setattr(security, "get_signal_types", fake.get_signal_types)
+    monkeypatch.setattr(security, "send_security_signals_batch", fake.send_security_signals_batch)
     return fake
+
+
+def fake_deps(monkeypatch, outcome=("ok", {"tool": "pip-audit", "vulnerable_count": 0, "unfixed_count": 0, "items": []})):
+    """Stub the deps scan (no subprocess) for tests that run the deps pack incidentally."""
+    from gait_sdk.checks import deps_pack
+
+    monkeypatch.setitem(deps_pack.CHECKS, deps_pack.CHECK_ID, lambda ctx: outcome)
 
 
 class SleepRecorder:

@@ -36,3 +36,27 @@ def setup_env(monkeypatch):
     """Inject mock environment for all tests automatically."""
     monkeypatch.setenv("GAIT_AUTH_URL", "https://dummy-auth.com/api")
     monkeypatch.setenv("GAIT_TIMEOUT", "5")
+
+
+@pytest.fixture(autouse=True)
+def no_network_for_check_tests(request, monkeypatch):
+    """The check-pack tests (tests/test_checks_*.py) must never touch the network
+    or run a real scanner: any socket connect or un-mocked scanner subprocess fails."""
+    if not request.module.__name__.rsplit(".", 1)[-1].startswith("test_checks_"):
+        return
+    import socket
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("test_checks_* tests must not open network connections")
+
+    # Name resolution is the choke point for any real host. (socket.connect
+    # itself stays: asyncio's event loop uses a loopback socketpair.)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(socket, "getaddrinfo", refuse)
+
+    from gait_sdk.checks import deps_pack
+
+    def no_scanner(*args, **kwargs):
+        raise AssertionError("test_checks_* tests must mock the dependency scanner subprocess")
+
+    monkeypatch.setattr(deps_pack, "RUNNER", no_scanner)

@@ -9,7 +9,7 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## 0.6.0 (unreleased)
 
-Built-in check packs (CHK2a). The package version is `0.6.0.dev0` until release.
+Built-in check packs (CHK2a, CHK2b). The package version is `0.6.0.dev0` until release.
 
 - The `auth_integration` alias is **kept** in 0.6.0 (the 0.5.0 note said it would be removed here); it will be removed in a future release.
 
@@ -19,9 +19,15 @@ Built-in check packs (CHK2a). The package version is `0.6.0.dev0` until release.
 - **The check registry**, `gait_sdk/checks/checks_v1.json` (shipped as package data), shared byte for byte with the Gait server and pinned by a canonical hash. `validate_payload()` enforces the same schema as the server: typed facts only (booleans, bounded integers, fixed choices, pattern-checked Django ids), no free text, at most 4 KB, and a `result` that matches the outcome. The SDK never sends a payload that fails it. `python -m gait_sdk.checks.registry --export-json` prints the registry.
 - Django's own `check --deploy` security ids are attached to the matching check as supporting facts (`django_ids`); ids with no matching check are shown locally and never sent.
 - Delivery retries: only when Gait is unreachable, up to three retries after 1, 2 and 4 seconds with the same `source_reference`. 400 and 401 are never retried; a 400 on one check doesn't stop the others.
+- **FastAPI check pack v1.0.0** (CHK2b): `gait-check --pack fastapi --app pkg.module:app`. Five checks: debug off, API docs hidden in production (WARNING, or FAIL with the new `--strict`), CORS not wildcard, TrustedHostMiddleware without `*`, HTTPSRedirectMiddleware. The app is imported and read only: no lifespan, startup/shutdown handler, request or middleware-stack build ever runs. A bad `--app` exits 3.
+- **Dependencies check pack v1.0.0** (CHK2b): `CHK.DEPS.KNOWN_VULNS`, wrapping pip-audit (new `[deps]` extra) or osv-scanner (`--deps-tool`). Sends counts plus at most 10 vulnerable `{package, version, advisory_id, fixed_in}` records. PASS with none, FAIL when any has a fix, WARNING when all are unfixed; `unknown` (never PASS) with a `reason` of `tool_missing`, `timeout`, `network` or `unparseable`.
+- **Batch delivery** (CHK2b): the engine asks Gait once per run which check ids it accepts (`GET .../tenant-signals/types/`), skips the ones it doesn't (without failing the run), and sends in chunks of Gait's `batch_max` (`POST .../tenant-signals/batch/`, all or nothing). Falls back to one request per check on older servers or with `--no-batch`. A 429 waits Retry-After (at most 60 s) once. New `gait_sdk.security.get_signal_types()` and `send_security_signals_batch()`, and exceptions `SignalEndpointNotFound` and `SignalRateLimited`.
+- `manage.py gait_check` runs the `django` and `deps` packs by default.
+- The registry (shared spec, canonical hash `29c9ebe1...`) adds `valid_for_seconds` per check, `limits.max_record_items`, and two fact types: `pattern` (one pattern-checked string) and `list_record` (at most `max_record_items` records of typed, pattern-checked fields). `validate_payload()` enforces both.
 
 ### Security
 - No setting value, request data or database data is ever sent. The SECRET_KEY and fallback keys are only measured (length, distinct characters, known prefix, known placeholder), never copied, logged or printed; tests assert the key appears in no payload, output or log.
+- The dependency list is never sent to Gait, only vulnerable packages, and scanner output text is never put into facts or reports. pip-audit / osv-scanner send your package names and versions to PyPI / OSV to look them up; Gait receives only the vulnerable packages, versions and advisory ids.
 
 ## [Unreleased]
 

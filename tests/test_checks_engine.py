@@ -267,9 +267,17 @@ def test_real_send_path_posts_one_signal_per_check(monkeypatch):
             return Resp(400, {"detail": "Invalid tenant security signal."})
         return Resp(201, {"signal_id": "s", "control_key": "c", "evidence_id": None, "received_at": "t"})
 
+    gets = []
+
+    async def fake_get(self, url, headers=None):
+        gets.append(url)
+        return Resp(404, {"detail": "Not found."})  # an older server: no types endpoint
+
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     with django_settings():
         report = engine.execute(run_id="ci:sha:job", sleep=SleepRecorder())
+    assert gets == ["https://dummy-auth.com/api/security/tenant-signals/types/"]
     signals = [body for url, body in posted if url.endswith("/security/tenant-signals/")]
     assert len(signals) == len(ALL)
     assert {s["source_reference"] for s in signals} == {"ci:sha:job"}

@@ -7,7 +7,7 @@ request data are never sent. See docs/CHECKS.md.
 
 - `registry`: the check definitions, loaded from `checks_v1.json` (shared
   byte for byte with the Gait server), and `validate_payload()`.
-- `django_pack`: the Django pack.
+- `django_pack`, `fastapi_pack`, `deps_pack`: the packs.
 - `engine`: runs packs, validates payloads and sends them.
 - `cli`: the `gait-check` command.
 

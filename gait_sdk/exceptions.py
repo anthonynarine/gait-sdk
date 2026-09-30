@@ -98,3 +98,29 @@ class SecuritySignalRejected(APIException):
     status_code = 400
     default_detail = "Invalid tenant security signal."
     default_code = "security_signal_rejected"
+
+
+class SignalEndpointNotFound(APIException):
+    """Raised when this Gait server doesn't have an optional endpoint (404).
+
+    Used by the batch and signal-types endpoints (`gait_sdk.security`), which
+    older Gait servers don't have. Callers fall back to the single-signal path.
+    """
+    status_code = 404
+    default_detail = "This Gait server doesn't support this endpoint."
+    default_code = "signal_endpoint_not_found"
+
+
+class SignalRateLimited(APIException):
+    """Raised when Gait rate-limits signal submission (429).
+
+    `retry_after` is the server's Retry-After in seconds, or None when it
+    didn't send a usable one.
+    """
+    status_code = 429
+    default_detail = "Too many security signals; try again later."
+    default_code = "signal_rate_limited"
+
+    def __init__(self, detail=None, code=None, retry_after=None):
+        super().__init__(detail, code)
+        self.retry_after = retry_after
