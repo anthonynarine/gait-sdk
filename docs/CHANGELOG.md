@@ -11,6 +11,8 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 Built-in check packs (CHK2a). The package version is `0.6.0.dev0` until release.
 
+- The `auth_integration` alias is **kept** in 0.6.0 (the 0.5.0 note said it would be removed here); it will be removed in a future release.
+
 ### Added
 - **Django check pack v1.0.0** (`gait_sdk.checks`): 21 checks against your Django settings (DEBUG, ALLOWED_HOSTS, SECRET_KEY strength and fallbacks, database credentials and TLS, security/CSRF/clickjacking middleware, HTTPS redirect, HSTS, nosniff, session and CSRF cookie flags, referrer and opener policies, CORS, admin path, DRF default permissions, password rules, email TLS). Each check is its own signal type (`CHK.DJANGO.*`) and its own control in Gait. Every check, rule and fix: `docs/CHECKS.md`.
 - **`python manage.py gait_check`** and the **`gait-check`** command (`[project.scripts]`), with `--dry-run`, `--no-send`, `--json`, `--fail-on`, `--fail-on-unknown`, `--run-id`, `--only`/`--skip` and `--environment` (an assertion; the environment comes from the connection key's application). Exit codes: 0 clean, 1 threshold reached, 2 delivery failure, 3 usage error or environment mismatch.

@@ -37,7 +37,7 @@ Sending needs the same two settings as any other signal: `GAIT_AUTH_URL` and `GA
 | `--json` | Print a JSON report: `{run_id, application, environment, results: [{id, outcome, result, facts, sent, error}], unmapped_django_ids}`. With `--dry-run` it also has `dry_run: true` and `requests` (the bodies). |
 | `--fail-on {fail,warning,never}` | Exit 1 when a result is at or above this level. Default `fail`. |
 | `--fail-on-unknown` | Also exit 1 on `unknown` or `error` outcomes. |
-| `--run-id ID` | The `source_reference` of every signal in the run (max 256 characters). Default `run:<uuid4>`. In CI use something stable per job, like `ci:<sha>:<job>`, so a retried job doesn't record the run twice. |
+| `--run-id ID` | The `source_reference` of every signal in the run: letters, digits and `: . _ -` only, at most 128 characters (Gait rejects anything else). Default `run:<uuid4>`. In CI use something stable per job, like `ci:<sha>:<job>`, so a retried job doesn't record the run twice. |
 | `--only ID` / `--skip ID` | Run only, or skip, these check ids (repeatable). Skipped checks send nothing. |
 
 **How it sends.** One POST per check to Gait's tenant-signal endpoint: `signal_type` is the check id, `result` is the mapped result, `source_reference` is the run id. If Gait is unreachable or answers unexpectedly, that POST is retried up to three times after 1, 2 and 4 seconds, with the same `source_reference` (Gait records a (application, check, run id) triple only once, so a retry can't double-count). If it still fails, the remaining checks in the run aren't attempted. A rejected check (400) is never retried and doesn't stop the others. A rejected key (401) is never retried and stops the run.

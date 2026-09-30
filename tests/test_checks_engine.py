@@ -192,15 +192,23 @@ def test_unknown_check_id_is_a_usage_error(monkeypatch):
 
 
 def test_bad_run_id_is_a_usage_error(monkeypatch):
-    with pytest.raises(engine.UsageError):
-        run(monkeypatch, run_id="x" * 257)
-    with pytest.raises(engine.UsageError):
-        run(monkeypatch, run_id="")
+    # The Gait server rejects any other source_reference on a check signal.
+    for bad in ("x" * 129, "", "run 1", "run/1", "patient Jane Doe", "ci:abc:build#1"):
+        with pytest.raises(engine.UsageError):
+            run(monkeypatch, run_id=bad)
+
+
+def test_run_id_pattern_accepts_the_documented_shapes(monkeypatch):
+    for good in ("ci:3611eb6:build-1842", "nightly.2026-09-29_01", "x" * 128):
+        run(monkeypatch, run_id=good)
 
 
 def test_default_run_id_shape():
+    import re
+
     run_id = engine.default_run_id()
     assert run_id.startswith("run:") and len(run_id) == 40
+    assert re.fullmatch(registry.source_reference_pattern(), run_id)
 
 
 # --- Exit codes -----------------------------------------------------------------------

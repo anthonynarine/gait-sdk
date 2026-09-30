@@ -101,7 +101,7 @@ Introspection (`/whoami/` per request) is the default only so that upgrading cha
 
 ## Upgrading from `auth_integration`
 
-0.5.0 renamed the package. The old name is a deprecated alias until 0.6.0. It returns the **same** module objects, so shared state such as the verifier and key cache stays single.
+0.5.0 renamed the package. The old name is a deprecated alias and will be removed in a future release. It returns the **same** module objects, so shared state such as the verifier and key cache stays single.
 
 | Before | After |
 |---|---|

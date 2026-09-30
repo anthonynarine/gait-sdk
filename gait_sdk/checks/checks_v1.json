@@ -12,7 +12,7 @@
   "common_facts": {
     "django_ids": {"type": "list_pattern", "pattern": "^[a-z_]{1,20}\\.[EW][0-9]{3}$", "max_items": 25}
   },
-  "limits": {"max_payload_bytes": 4096, "max_total_keys": 100, "max_list_items": 25},
+  "limits": {"max_payload_bytes": 4096, "max_total_keys": 100, "max_list_items": 25, "source_reference_pattern": "^[A-Za-z0-9:._-]{1,128}$"},
   "checks": {
     "CHK.DJANGO.DEBUG_OFF": {
       "pack": "django", "severity": "HIGH", "env_gated": true,

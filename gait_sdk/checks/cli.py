@@ -74,7 +74,7 @@ def add_arguments(parser: argparse.ArgumentParser, *, include_settings: bool = T
     )
     parser.add_argument(
         "--run-id", metavar="ID",
-        help="Source reference for every signal in this run (max 256 chars). Default run:<uuid4>. "
+        help="Source reference for every signal in this run: letters, digits and : . _ - (max 128). Default run:<uuid4>. "
              "In CI use something like ci:<sha>:<job>.",
     )
     parser.add_argument("--only", action="append", metavar="CHECK_ID", help="Run only this check (repeatable).")

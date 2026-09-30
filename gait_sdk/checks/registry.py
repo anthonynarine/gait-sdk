@@ -33,7 +33,7 @@ SPEC_FILENAME = "checks_v1.json"
 
 # sha256 of json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8").
 # Independent of line endings; the server asserts the same value.
-CHECKS_V1_CANONICAL_SHA256 = "27613d8d0987dfc586d3cc3a790071ccc659d222b811e4db873b6672ae6268d3"
+CHECKS_V1_CANONICAL_SHA256 = "1a5f4cd13fe5cb17eef336e12b96cf52e2fbeb7875bb6a97dd8474417a343e1d"
 
 PAYLOAD_VERSION = 1
 PAYLOAD_KEYS = frozenset({"v", "pack", "pack_version", "sdk_version", "outcome", "facts"})
@@ -199,8 +199,13 @@ def outcomes() -> tuple[str, ...]:
     return tuple(load_spec()["outcomes"])
 
 
-def limits() -> Mapping[str, int]:
+def limits() -> Mapping[str, Any]:
     return load_spec()["limits"]
+
+
+def source_reference_pattern() -> str:
+    """The pattern the Gait server enforces on a check signal's source_reference (the run id)."""
+    return load_spec()["limits"]["source_reference_pattern"]
 
 
 def common_facts() -> Mapping[str, Mapping[str, Any]]:

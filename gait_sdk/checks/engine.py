@@ -24,6 +24,8 @@ Nothing here ever logs or prints a setting value.
 
 from __future__ import annotations
 
+import re
+
 import asyncio
 import logging
 import time
@@ -42,7 +44,6 @@ RETRY_DELAYS: tuple[float, ...] = (1, 2, 4)
 VALID_ENVIRONMENTS = ("local", "test", "ci", "staging", "production")
 GATED_ENVIRONMENTS = frozenset({"local", "test"})
 DEFAULT_OFFLINE_ENVIRONMENT = "production"
-MAX_RUN_ID_LENGTH = 256
 FAIL_ON_CHOICES = ("fail", "warning", "never")
 
 EXIT_OK = 0
@@ -362,8 +363,12 @@ def execute(
     for pack in packs:
         pack_module(pack)
     run_id = run_id if run_id is not None else default_run_id()
-    if not isinstance(run_id, str) or not run_id.strip() or len(run_id) > MAX_RUN_ID_LENGTH:
-        raise UsageError(f"--run-id must be 1-{MAX_RUN_ID_LENGTH} characters.")
+    # The Gait server rejects a check signal whose source_reference doesn't match
+    # the shared spec's pattern (letters, digits and : . _ -, at most 128).
+    if not isinstance(run_id, str) or not re.fullmatch(registry.source_reference_pattern(), run_id):
+        raise UsageError(
+            "--run-id may only use letters, digits and : . _ - (1-128 characters), e.g. ci:<sha>:<job>."
+        )
     if environment is not None and environment not in VALID_ENVIRONMENTS:
         raise UsageError(f"--environment must be one of: {', '.join(VALID_ENVIRONMENTS)}.")
     select_check_ids(packs, only, skip)  # fail on bad --only/--skip before any network call

@@ -272,7 +272,7 @@ Full threat model, guarantees, limits and audit history: [docs/SECURITY.md](http
 
 ## Upgrading from `auth_integration`
 
-The package was renamed in **0.5.0**. The old import name still works as a deprecated alias until 0.6.0, returning the *same* modules, so nothing breaks while you migrate:
+The package was renamed in **0.5.0**. The old import name still works as a deprecated alias (it will be removed in a future release), returning the *same* modules, so nothing breaks while you migrate:
 
 1. `pip install gait-sdk` (replacing the old git URL pin).
 2. Replace `auth_integration` with `gait_sdk` in imports, `INSTALLED_APPS`, and DRF settings strings.

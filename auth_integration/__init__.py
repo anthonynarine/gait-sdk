@@ -14,7 +14,7 @@ Old names resolve to the SAME module objects as the new ones (not copies),
 so process-wide state -- the configured token verifier and its JWKS cache,
 the Django bearer cache -- is shared no matter which name a caller used.
 
-Scheduled for removal in 0.6.0. Migrate: replace `auth_integration` with
+Scheduled for removal in a future release. Migrate: replace `auth_integration` with
 `gait_sdk` in imports, settings strings, and INSTALLED_APPS.
 """
 
@@ -31,7 +31,7 @@ _NEW = "gait_sdk"
 
 warnings.warn(
     "The 'auth_integration' package was renamed to 'gait_sdk' (0.5.0). "
-    "The old name is a deprecated alias and will be removed in 0.6.0.",
+    "The old name is a deprecated alias and will be removed in a future release.",
     DeprecationWarning,
     stacklevel=2,
 )
