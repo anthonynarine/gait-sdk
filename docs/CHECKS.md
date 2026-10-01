@@ -21,7 +21,7 @@ gait-sdk 0.6.0 (unreleased) ships built-in check packs. A pack reads your applic
 
 ## Running the checks
 
-Inside a Django project (add `"gait_sdk"` to `INSTALLED_APPS`). This runs the `django` and `deps` packs; add `--pack django` to run only the settings checks:
+Inside a Django project (add `"gait_sdk"` to `INSTALLED_APPS`). This runs the `django` pack. Dependency checks are opt-in: add `--pack deps` in CI to include them (they send your package names and versions to PyPI/OSV and can take up to 2 minutes):
 
 ```bash
 python manage.py gait_check --dry-run
@@ -40,7 +40,7 @@ Sending needs the same two settings as any other signal: `GAIT_AUTH_URL` and `GA
 
 | Flag | Meaning |
 |---|---|
-| `--pack PACK` | Pack to run (repeatable): `django`, `fastapi`, `deps`. Default: `django` for `gait-check`, `django` and `deps` for `manage.py gait_check` (where `fastapi` doesn't apply). Anything else is a usage error. |
+| `--pack PACK` | Pack to run (repeatable): `django`, `fastapi`, `deps`. Default: `django`, for both `gait-check` and `manage.py gait_check` (where `fastapi` doesn't apply). `deps` runs only when you pass `--pack deps`. Anything else is a usage error. |
 | `--settings MODULE` | `gait-check` only: sets `DJANGO_SETTINGS_MODULE`, then runs `django.setup()`. (`manage.py` has its own `--settings`.) |
 | `--app MODULE:ATTR` | `gait-check` only, required for `--pack fastapi`: the app object, e.g. `mypackage.main:app`. |
 | `--strict` | Stricter rules where a check has them. Today: FastAPI API docs exposed in production are FAIL instead of WARNING. |

@@ -100,9 +100,10 @@ gait-sdk ships ready-made checks, so you don't have to write your own. There are
 Each check reports to Gait as its own control, so a failing check opens its own finding and a later pass closes exactly that one.
 
 ```bash
-# Inside a Django project ("gait_sdk" in INSTALLED_APPS): runs the django and deps packs
+# Inside a Django project ("gait_sdk" in INSTALLED_APPS): runs the django pack
 python manage.py gait_check --dry-run      # see exactly what would be sent; needs no key
 python manage.py gait_check                # run and report to Gait
+python manage.py gait_check --pack django --pack deps   # opt in to dependency checks (sends package names to PyPI/OSV)
 
 # Or without manage.py
 gait-check --pack django --settings mysite.settings --run-id "ci:$GIT_SHA:$JOB_ID"

@@ -223,16 +223,34 @@ def test_table_output(monkeypatch):
 
 
 # --- Management command ----------------------------------------------------------------------
+def _deps_must_not_run(monkeypatch):
+    from gait_sdk.checks import deps_pack
+
+    def fail(ctx):
+        raise AssertionError("the deps pack ran without --pack deps")
+
+    monkeypatch.setitem(deps_pack.CHECKS, deps_pack.CHECK_ID, fail)
+
+
 def test_management_command_dry_run(monkeypatch):
     fake = install_fake_gait(monkeypatch, FakeGait(), credential=None)
-    fake_deps(monkeypatch)
+    _deps_must_not_run(monkeypatch)
     out = io.StringIO()
     with django_settings():
         call_command(Command(), "--dry-run", "--json", stdout=out)
     data = json.loads(out.getvalue())
-    # django + deps by default
-    assert [r["id"] for r in data["results"]] == list(ALL) + ["CHK.DEPS.KNOWN_VULNS"]
+    # The django pack only: dependency checks send package names to PyPI/OSV, so they're opt-in.
+    assert [r["id"] for r in data["results"]] == list(ALL)
     assert fake.sent == []
+
+
+def test_management_command_deps_is_opt_in(monkeypatch):
+    install_fake_gait(monkeypatch, FakeGait(), credential=None)
+    fake_deps(monkeypatch)
+    out = io.StringIO()
+    with django_settings():
+        call_command(Command(), "--pack", "django", "--pack", "deps", "--dry-run", "--json", stdout=out)
+    assert [r["id"] for r in json.loads(out.getvalue())["results"]] == list(ALL) + ["CHK.DEPS.KNOWN_VULNS"]
 
 
 def test_management_command_rejects_the_fastapi_pack(monkeypatch):
@@ -252,11 +270,11 @@ def test_management_command_django_pack_only(monkeypatch):
 
 def test_management_command_sends_and_exits_with_the_same_codes(monkeypatch):
     fake = install_fake_gait(monkeypatch, FakeGait())
-    fake_deps(monkeypatch)
+    _deps_must_not_run(monkeypatch)
     with django_settings(DEBUG=True), pytest.raises(SystemExit) as exc:
         call_command(Command(), "--run-id", "ci:m:1", stdout=io.StringIO())
     assert exc.value.code == 1
-    assert len(fake.sent) == len(ALL) + 1
+    assert len(fake.sent) == len(ALL)
     assert {c["source_reference"] for c in fake.sent} == {"ci:m:1"}
 
 

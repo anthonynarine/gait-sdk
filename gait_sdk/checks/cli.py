@@ -5,7 +5,7 @@
     gait-check --pack fastapi --app mypackage.main:app --pack deps
 
 `python manage.py gait_check` takes the same flags (Django's own --settings
-applies there; no --app, and it runs the django and deps packs by default)
+applies there; no --app; it runs the django pack by default and the deps pack only with --pack deps)
 and shares this code.
 
 Exit codes:
@@ -32,6 +32,9 @@ AVAILABLE_PACKS = engine.AVAILABLE_PACKS
 CLI_DEFAULT_PACKS = ("django",)
 # manage.py gait_check: the app is already the Django project, so FastAPI doesn't apply.
 MANAGEMENT_PACKS = ("django", "deps")
+# Dependency checks are opt-in everywhere: they send package names and versions
+# to PyPI/OSV (an off-box disclosure the customer must choose) and can take 120 s.
+MANAGEMENT_DEFAULT_PACKS = ("django",)
 DEPS_TOOLS = ("pip-audit", "osv-scanner")
 
 
