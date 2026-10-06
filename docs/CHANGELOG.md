@@ -9,7 +9,29 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Documentation only. No code changes.
+## [0.5.2] - 2026-10-06
+
+Bug fix: the DRF introspection path now accepts Gait's real `/whoami/` response and its token contract.
+This release also carries the documentation changes listed under "Changed".
+
+### Fixed
+- **Every request failed with 401 "Invalid authentication response." against real Gait.**
+  `_validate_claims_shape` (`gait_sdk.django.authentication`) required every
+  field to be a non-empty string, but Gait's `/whoami/` sends `id` as a JSON
+  number (its integer primary key) and allows empty profile names.
+  - `id` now accepts a non-empty string or an int (never a `bool`) and is
+    normalized to `str(id)`, so consumers and the JWKS path's `sub` see the
+    same string.
+  - `email` remains fail-closed (missing, empty or wrong type is rejected).
+  - `role`, `first_name` and `last_name` are optional: a missing field becomes
+    `""`, and a present one must be a string (empty allowed). This follows
+    Gait's token contract, where `sub` is the only identity key and `role` is
+    being removed from `/whoami/`. `ClaimsUser` now has the same shape whether
+    the verifier is `introspection` or `jwks`.
+  - The validated claims are a copy; the input dict is not mutated.
+  - The FastAPI adapter and the JWKS path were not affected.
+  - Covered by `tests/test_claims_shape_gait_whoami.py`, including an
+    end-to-end `ExternalJWTAuthentication` test with a Gait-shaped body.
 
 ### Changed
 - **README:** covers both jobs. Reporting security checks now has its own quick start, and verifying users is marked early access.
@@ -167,7 +189,8 @@ callers.
 ### Added
 - DRF auth adapter test coverage (`test_django_authentication.py`).
 
-[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/anthonynarine/gait-sdk/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/anthonynarine/gait-sdk/compare/v0.4.0...v0.4.1
