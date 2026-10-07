@@ -77,7 +77,7 @@ async def verify_token(
     try:
         logger.info("Validating Bearer token via Gait Auth API.")
         user_claims = await validate_token(token)
-        logger.info("✅ Token validated successfully (claims attached).")
+        logger.info("Token validated successfully (claims attached).")
         return user_claims
 
     except InvalidTokenError as e:

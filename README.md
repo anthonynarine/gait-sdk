@@ -205,6 +205,8 @@ async def secure_endpoint(claims=Depends(verify_token)):
 
 This keeps the shared library lightweight and undomained — it never needs to know about exams, organizations, or any other business concept.
 
+See `auth_integration/docs/AuthIntegration_Identity_and_Tenancy_Boundaries.md` for the recorded decision on how this stays true even as Gait grows into a multi-application SaaS identity provider — user identity, application/customer identity, and organization membership are three separate axes, and only the first belongs in this package's contract today.
+
 ---
 
 ## Error behavior
