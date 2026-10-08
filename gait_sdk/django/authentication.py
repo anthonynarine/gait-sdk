@@ -89,6 +89,8 @@ def _cookie_auth_enabled() -> bool:
 # 🧩 Types
 # -----------------------------------------------------------------------------
 class BaseUserClaims(TypedDict):
+    # Always a string after validation; Gait's /whoami/ sends an int, which
+    # _validate_claims_shape normalizes with str().
     id: str
     email: str
     # `role` is an opaque, consuming-application-defined string. This SDK does not
@@ -240,29 +242,49 @@ def _validate_claims_shape(raw: object) -> UserClaims:
         raw: The parsed JSON object returned by Gait.
 
     Returns:
-        UserClaims: A validated claims dict.
+        UserClaims: A validated claims dict (a copy), with `id` normalized
+        to a string.
 
     Raises:
-        AuthenticationFailed: If payload is missing required keys.
+        AuthenticationFailed: If a required key is missing or malformed.
     """
     if not isinstance(raw, dict):
         raise AuthenticationFailed("Invalid authentication response.")
 
-    # Step 1: Required keys must be present AND be non-empty strings. This is
-    # deliberately generic about `role` — this SDK does not define or restrict
-    # a consuming application's role vocabulary (see BaseUserClaims.role) — but
-    # every one of these fields is documented as a string, so a non-string or
-    # empty value is malformed identity data and must fail closed rather than
-    # silently pass through as an anonymous or partially-formed user.
-    required = ("id", "email", "role", "first_name", "last_name")
-    for key in required:
+    claims = dict(raw)
+
+    # Step 1: `id` -- Gait's /whoami/ serializes its integer primary key as a
+    # JSON number, so accept a non-empty string or an int (never a bool, which
+    # is an int subclass) and normalize to str. Every consumer, and the JWKS
+    # path's `sub`, then sees the same string form of the same subject.
+    if "id" not in raw:
+        raise AuthenticationFailed("Invalid authentication response.")
+    subject = raw["id"]
+    if isinstance(subject, bool):
+        raise AuthenticationFailed("Invalid authentication response.")
+    if isinstance(subject, int):
+        claims["id"] = str(subject)
+    elif not isinstance(subject, str) or not subject:
+        raise AuthenticationFailed("Invalid authentication response.")
+
+    # Step 2: `email` is identity and stays fail-closed: a non-empty string.
+    email = raw.get("email")
+    if not isinstance(email, str) or not email:
+        raise AuthenticationFailed("Invalid authentication response.")
+
+    # Step 3: `role`, `first_name`, `last_name` are optional profile/legacy
+    # fields. Gait's token contract (docs/AUTH_TOKEN_CONTRACT.md) makes `sub`
+    # the only identity key and is removing `role` from /whoami/, and names
+    # may be empty. Missing -> "" (the same values the JWKS path yields, so
+    # ClaimsUser has one shape whichever verifier is configured); present ->
+    # must be a string, empty allowed.
+    for key in ("role", "first_name", "last_name"):
         if key not in raw:
-            raise AuthenticationFailed("Invalid authentication response.")
-        value = raw[key]
-        if not isinstance(value, str) or not value:
+            claims[key] = ""
+        elif not isinstance(raw[key], str):
             raise AuthenticationFailed("Invalid authentication response.")
 
-    return cast(UserClaims, raw)
+    return cast(UserClaims, claims)
 
 
 async def _validate_with_cookies(cookies: dict) -> UserClaims:

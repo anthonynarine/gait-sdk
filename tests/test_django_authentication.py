@@ -205,8 +205,8 @@ def test_authenticate_header_returns_bearer():
         {"id": "1", "email": "a@example.com", "role": 123, "first_name": "A", "last_name": "B"},
         # Non-string id
         {"id": None, "email": "a@example.com", "role": "admin", "first_name": "A", "last_name": "B"},
-        # Empty-string role (present, string-typed, but not a real value)
-        {"id": "1", "email": "a@example.com", "role": "", "first_name": "A", "last_name": "B"},
+        # Empty email (identity field)
+        {"id": "1", "email": "", "role": "admin", "first_name": "A", "last_name": "B"},
         # Non-dict payload entirely
         "not-a-dict",
         None,
@@ -214,8 +214,9 @@ def test_authenticate_header_returns_bearer():
 )
 def test_bearer_malformed_claims_fail_closed(monkeypatch, bad_claims):
     """
-    Well-formed JSON from Gait that has missing fields, wrong types, or an
-    empty role must be treated as untrusted and denied — never turned into
+    Well-formed JSON from Gait that has a missing identity field, wrong
+    types, or an empty identity value must be treated as untrusted and denied
+    (0.5.2: `role` and names are optional; empty role is accepted) — never turned into
     an authenticated (or anonymous-fallback) request, and never a
     partially-constructed ClaimsUser.
     """
