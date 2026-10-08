@@ -9,6 +9,94 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-07
+
+Security fixes in the deprecated role helpers (`gait_sdk.permissions`,
+`gait_sdk.utils`). Read "Changed" before upgrading if you use them.
+
+### Security
+- **GAIT-SEC-029 (high): `require_role` no longer passes through when DRF is installed.**
+  It used to return the route function unchanged whenever `rest_framework` was
+  importable, so a FastAPI or plain route in an environment that also had DRF
+  installed was never role-checked. `require_role` now has one implementation
+  that always enforces against the route's `claims` keyword argument (403 on
+  mismatch), for both `async def` and `def` routes. When it cannot enforce it
+  raises at decoration time instead of passing through: `RuntimeError` if
+  FastAPI is not installed, `TypeError` if it decorates a non-function.
+  The deprecation warning is unchanged.
+- **GAIT-SEC-056 (low): role helpers deny an empty or missing role.**
+  `HasRole`, `HasAnyRole`, `require_role` and `gait_sdk.utils.is_admin` /
+  `is_physician` / `is_technologist` deny when the user's role is missing,
+  not a string, or empty/blank. `get_user_role` returns `None` for such a role,
+  and `get_user_claims` returns `{}` when `user_claims` is not a dict.
+  Construction now rejects bad arguments:
+  - `HasRole(...)` / `require_role(...)`: an empty or blank role raises `ValueError`, a non-string raises `TypeError`.
+  - `HasAnyRole(...)`: a bare string (which made the check a substring test) or a non-collection raises `TypeError`; an empty collection or an empty/blank entry raises `ValueError`; a non-string entry raises `TypeError`.
+  - Covered by `tests/test_role_helpers_fail_closed.py`, which runs with DRF and FastAPI installed together.
+- **GAIT-SEC-071 (low): the documented DRF usage is corrected (docs only).**
+  The docs showed an instance in `permission_classes`
+  (`permission_classes = [HasRole(...)]`), which fails the request: DRF
+  instantiates each entry with no arguments. Use the class form, which works
+  on 0.5.2 and 0.5.3 alike:
+  ```python
+  class PhysicianRole(HasRole):
+      def __init__(self):
+          super().__init__("physician")
+
+  permission_classes = [PhysicianRole]
+  ```
+  These classes, and any subclass, are for DRF `permission_classes` only;
+  never use them with FastAPI's `Depends()` (GAIT-SEC-074, GAIT-SEC-075).
+  Covered by `tests/test_permissions_documented_usage.py`: a real DRF view
+  using this form allows the right role and answers 403 (never 500) for a
+  wrong, empty, blank, padded or missing role and for missing claims.
+- **GAIT-SEC-074 (medium): `HasRole`/`HasAnyRole` must never become FastAPI
+  dependencies.** An unreleased change in this cycle (DRF-shaped classes in
+  `gait_sdk/permissions.py`, missing authorization check) let FastAPI accept
+  them in `Depends()` without a role check. It was reverted before release,
+  so FastAPI refuses such a route at registration. A regression test, run with DRF and FastAPI installed
+  together, fails if `Depends(HasRole(...))` or `Depends(HasAnyRole([...]))`
+  ever answers 200. Never pass these classes to `Depends()`; use an
+  application-owned dependency.
+- **GAIT-SEC-075 (low): `HasRole`/`HasAnyRole` classes and subclasses are
+  refused as FastAPI dependencies.** Older than this release
+  (`gait_sdk/permissions.py`, missing authorization check): FastAPI's
+  `Depends()` accepted the classes themselves and any subclass, including
+  the documented no-argument DRF subclass, and constructed them without a
+  role check. Both classes now carry a signature FastAPI cannot satisfy, so
+  it refuses such a route at registration (with or without DRF installed);
+  DRF `permission_classes` is unaffected. Neither the classes nor any
+  subclass may be used with `Depends()`: they are for DRF only. FastAPI apps
+  use an application-owned dependency or `require_role` in the documented
+  order. The regression test covers instances, the classes and subclasses,
+  in route `dependencies=` and as a parameter default.
+- **GAIT-SEC-070 (low): `require_role` decorator order documented.** It must
+  sit below the FastAPI route decorator (`@app.get(...)` on top); placed
+  above it, the route FastAPI registers is not role-checked. Not a
+  regression. The docs now recommend an application-owned `Depends()` role
+  check, which has no ordering pitfall. The documented order and the
+  `Depends()` pattern are pinned by tests.
+
+### Changed (behaviour apps must know about)
+- **`@require_role(...)` on a DRF view, or anywhere outside FastAPI, no longer
+  silently allows.** Code that used it on a DRF view relied on it being a no-op.
+  It now enforces (403 unless the route's `claims` keyword argument carries the
+  role), and raises `RuntimeError` at import/decoration time if FastAPI is not
+  installed. For DRF views, list a `HasRole` subclass in `permission_classes`
+  (the class form shown under GAIT-SEC-071 above).
+- **`HasAnyRole("admin")` (a string instead of a list) now raises `TypeError`**
+  instead of silently doing a substring match; pass `["admin"]`.
+- A user with an empty or missing role is denied by every role helper.
+
+### Documentation
+- `gait_sdk/docs/permissions.md`: working DRF (class form) and FastAPI
+  patterns; never use `HasRole`/`HasAnyRole` or any subclass with `Depends()`
+  (GAIT-SEC-074, GAIT-SEC-075);
+  the required `require_role` order (GAIT-SEC-070); `HasRole`/`HasAnyRole` take
+  their DRF shape whenever DRF is importable, even in FastAPI code
+  (GAIT-SEC-072); `require_role` trusts the route's `claims` argument, which
+  must come from `Depends(verify_token)` (GAIT-SEC-073).
+
 ## [0.5.2] - 2026-10-06
 
 Bug fix: the DRF introspection path now accepts Gait's real `/whoami/` response and its token contract.
@@ -189,7 +277,8 @@ callers.
 ### Added
 - DRF auth adapter test coverage (`test_django_authentication.py`).
 
-[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/anthonynarine/gait-sdk/compare/v0.4.1...v0.5.0
