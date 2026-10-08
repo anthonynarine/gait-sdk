@@ -52,7 +52,7 @@ pip install "gait-sdk[fastapi]"    # FastAPI services
 pip install gait-sdk               # core only (security checks, verification, sessions, app identity)
 ```
 
-Pin exact versions in production (for example `gait-sdk==0.5.3`). See [Supply chain](https://github.com/anthonynarine/gait-sdk/blob/main/docs/PUBLISHING.md#consuming-safely).
+Pin exact versions in production (for example `gait-sdk==0.5.4`). See [Supply chain](https://github.com/anthonynarine/gait-sdk/blob/main/docs/PUBLISHING.md#consuming-safely).
 
 ### Compatibility
 

@@ -117,7 +117,6 @@ from gait_sdk.settings import GAIT_APPLICATION_CREDENTIAL, GAIT_AUTH_URL, GAIT_T
 # safe correlation identifier (source_reference) only.
 # -----------------------------------------------------------------------------
 logger = logging.getLogger("gait_sdk.security")
-logger.setLevel(logging.INFO)
 
 # One currently-known approved signal_type, exposed only as a convenience
 # constant — NOT an exhaustive enum. Gait's own tenant_signal_registry.py

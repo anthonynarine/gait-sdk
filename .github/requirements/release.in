@@ -1,0 +1,8 @@
+# Release build tools (GAIT-SEC-082). Edit this file, then regenerate
+# release.txt with the command at the top of release.txt.
+build
+twine
+# Build backend, installed here (hash-pinned) because the workflows build with
+# `python -m build --no-isolation`; keep it within pyproject's build-system
+# requirement.
+setuptools>=77.0

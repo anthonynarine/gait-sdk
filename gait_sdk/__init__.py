@@ -15,7 +15,18 @@ Design rules:
 
 from __future__ import annotations
 
+import logging
 from importlib.metadata import PackageNotFoundError, version
+
+
+# ---------------------------------------------------------------------
+# Logging (GAIT-SEC-034)
+# ---------------------------------------------------------------------
+# A library never sets levels or handlers on its own loggers: the host
+# application decides what is emitted and where. The NullHandler only stops
+# Python's "last resort" handler from printing gait_sdk records to stderr
+# when the host has configured no logging at all.
+logging.getLogger("gait_sdk").addHandler(logging.NullHandler())
 
 
 # ---------------------------------------------------------------------

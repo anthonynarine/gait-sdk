@@ -58,7 +58,6 @@ _is_django = _has_django
 # ⚙️ Logger setup (lightweight internal)
 # -----------------------------------------------------------------------------
 logger = logging.getLogger("gait_sdk.settings")
-logger.setLevel(logging.INFO)
 
 # -----------------------------------------------------------------------------
 # 🔧 Helper: Safe environment or Django setting loader

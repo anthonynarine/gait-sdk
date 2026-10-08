@@ -91,7 +91,8 @@ Which operations are sensitive is the consuming application's decision.
 
 ## Django specifics (JWKS mode)
 
-- Credentials: the Bearer header, or else the `access_token` cookie. Refresh and temp cookies are never used.
+- Credentials: the `Authorization: Bearer` header only. Cookies are never read in JWKS mode, so there is no CSRF exposure.
+- Legacy cookie mode (forwarding the `access_token` cookie to `/whoami/`) exists only on the introspection path, is off by default, is deprecated, and must be opted into with `GAIT_ALLOW_COOKIE_AUTH=True`. Refresh and temp cookies are never forwarded.
 - The 45 s bearer cache is not used, because local verification is already cheap.
 - `ClaimsUser(id=subject, email, role="", first_name="", last_name="")`.
 - `request.user_claims` and `request.auth` hold `VerifiedIdentity.as_claims()`. The legacy keys `id`, `first_name`, `last_name` and `role` are kept but empty, so existing indexing code does not break.

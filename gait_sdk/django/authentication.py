@@ -5,17 +5,21 @@ gait_sdk.django.authentication — DRF Adapter
 
 Purpose:
 --------
-Django REST Framework (DRF) authentication backend that validates requests
-against the centralized Gait Auth API (/whoami/).
+Django REST Framework (DRF) authentication backend for Gait identities.
 
-Modes:
-------
-1) DEV/Bearer Mode:
-   - Reads "Authorization: Bearer <token>".
-   - Validates via shared async validator `validate_token(token)`.
+Modes (selected by GAIT_TOKEN_VERIFIER):
+----------------------------------------
+1) JWKS mode (local verification):
+   - Reads "Authorization: Bearer <token>" ONLY. Cookies are never read, so
+     there is no CSRF exposure. Never falls back to /whoami/.
 
-2) PROD/Cookie Mode:
-   - If no Bearer token is present, forwards request.COOKIES to Gait /whoami/.
+2) Introspection mode (Gait /whoami/):
+   - Reads "Authorization: Bearer <token>" and validates it via the shared
+     async validator `validate_token(token)`.
+   - Legacy cookie mode (DEPRECATED, off by default): only when
+     GAIT_ALLOW_COOKIE_AUTH=True and no Bearer token is present, the
+     `access_token` cookie (and no other cookie) is forwarded to /whoami/.
+     It exists only on this introspection path.
 
 On success:
 -----------

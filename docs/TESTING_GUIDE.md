@@ -25,6 +25,7 @@ All tests are executed using **pytest** with **pytest‑asyncio** enabled.
 | `test_jwks_adapters.py` | Django + FastAPI adapters under JWKS; verifier selection and startup config validation; role-helper deprecations |
 | `test_session_check.py` | Live session check: active / revoked / unreachable / subject mismatch; never cached |
 | `test_security_hardening_050.py` | 0.5.0 audit fixes: no lock during I/O (M1), https + exact-localhost URLs (L1/L2), FastAPI shape validation (L5), bounded JWKS (L6), host-only logging |
+| `test_hygiene_054.py` | 0.5.4 hygiene, workflows parsed as YAML: actions pinned by commit SHA, Dependabot (GAIT-SEC-032); effective job permissions at most `contents: read`, OIDC only on the publish job, no `pull_request_target`/`workflow_run` (080), checkouts without persisted credentials (081), hash-pinned release tools with `--require-hashes` (082), each rule also tested on mutated copies; no `requests` dependency or import (033); library loggers stay `NOTSET` with a `NullHandler` (034) |
 | `test_rename_compat_shim.py` | `auth_integration` alias returns the same `gait_sdk` modules, and warns |
 | `test_django_authentication.py` | DRF adapter: introspection path, bearer cache, legacy cookie mode (opt-in, access token only), `authenticate_header()` (401 vs 403) |
 | `test_dependencies.py`, `test_role_dependency_status_codes.py` | FastAPI `verify_token` and status codes |

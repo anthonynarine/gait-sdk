@@ -66,7 +66,6 @@ from gait_sdk.settings import GAIT_APPLICATION_CREDENTIAL, GAIT_AUTH_URL, GAIT_T
 # ⚙️ Logger (never logs the raw credential — see verify_application)
 # -----------------------------------------------------------------------------
 logger = logging.getLogger("gait_sdk.application")
-logger.setLevel(logging.INFO)
 
 # -----------------------------------------------------------------------------
 # 🔑 Dedicated application-credential transport

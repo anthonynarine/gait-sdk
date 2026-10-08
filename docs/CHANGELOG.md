@@ -9,6 +9,70 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-07
+
+Hygiene release: CI supply chain, dependencies, logging and two docs fixes.
+No change to verification behaviour.
+
+### Removed
+- **GAIT-SEC-033 (info): `requests` is no longer a runtime dependency.** It
+  was declared in `pyproject.toml` but never imported by the package (the
+  HTTP client is `httpx`). **If your project used `requests` without
+  declaring it, because it arrived transitively with gait-sdk, add it to your
+  own dependencies before upgrading.** Covered by `tests/test_hygiene_054.py`
+  (no source file imports it; every module imports with it unavailable) and a
+  CI check that a core install does not contain it.
+
+### Changed
+- **GAIT-SEC-034 (low): library loggers no longer force a level.** Five
+  modules (`client`, `security`, `application`, `settings`,
+  `fastapi.dependencies`) called `setLevel(INFO)` on their loggers, which
+  overrode the host application's logging configuration. They now leave the
+  level `NOTSET`, so your configuration decides what is emitted. The
+  `gait_sdk` package logger gets a `NullHandler`, the standard library
+  practice. If you relied on gait-sdk INFO records appearing without
+  configuring logging, set the level yourself, for example
+  `logging.getLogger("gait_sdk").setLevel(logging.INFO)`.
+
+### Security
+- **GAIT-SEC-032 (medium): CI and release workflows pin actions by commit.**
+  Every third-party action in `.github/workflows/` is pinned to a full
+  40-character commit SHA (the release tag is in a trailing comment),
+  including the PyPI publish action, which was referenced by a moving branch.
+  Workflows default to `contents: read`; `id-token: write` is granted only to
+  the publish job. `.github/dependabot.yml` proposes weekly updates for
+  GitHub Actions and pip. A test fails if any `uses:` is not SHA-pinned.
+- **GAIT-SEC-080 (low): the workflow hygiene test now checks permissions
+  structurally.** `tests/test_hygiene_054.py` missed job-level permission
+  escalation (it matched lines of text). It now parses `.github/workflows/`
+  as YAML, flow-style mappings included, and requires every job's effective
+  permissions to be at most `contents: read`, except the `publish` job, which
+  must be exactly `id-token: write` (optionally plus `contents: read`).
+  `read-all`, `write-all`, any other write scope, and the
+  `pull_request_target` / `workflow_run` triggers fail the test. Each rule is
+  also tested against mutated copies of the workflows. PyYAML joins the
+  `[test]` extra.
+- **GAIT-SEC-081 (info): CI checkouts no longer keep the job token.** Every
+  `actions/checkout` step sets `persist-credentials: false`; the test
+  requires it.
+- **GAIT-SEC-082 (info): release build tools are hash-pinned.** The publish
+  and test build jobs installed `build` and `twine` unpinned. They now install
+  `.github/requirements/release.txt` (exact versions with SHA-256 hashes,
+  including the `setuptools` build backend) with `pip install
+  --require-hashes`, and build with `python -m build --no-isolation`, so the
+  build fetches nothing unpinned. Dependabot watches that file weekly; the
+  test requires all of it.
+- **GAIT-SEC-083 (info): `gait_sdk/django/authentication.py` module docstring
+  corrected (docs only).** It described cookie forwarding as the production
+  mode. Cookie mode is legacy: introspection-only, deprecated, off by default
+  (`GAIT_ALLOW_COOKIE_AUTH`), and it forwards only the `access_token` cookie;
+  JWKS mode reads the Bearer header only.
+- **GAIT-SEC-031 (low): `gait_sdk/docs/verification.md` corrected (docs only).**
+  It said JWKS mode in Django reads the `access_token` cookie as a fallback.
+  It does not: JWKS mode reads the `Authorization: Bearer` header only. Legacy
+  cookie mode exists only on the introspection path, is deprecated and
+  off by default (`GAIT_ALLOW_COOKIE_AUTH`).
+
 ## [0.5.3] - 2026-10-07
 
 Security fixes in the deprecated role helpers (`gait_sdk.permissions`,
@@ -277,7 +341,8 @@ callers.
 ### Added
 - DRF auth adapter test coverage (`test_django_authentication.py`).
 
-[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/anthonynarine/gait-sdk/compare/v0.5.0...v0.5.1

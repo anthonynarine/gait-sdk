@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gait-sdk"
-version = "0.5.3"
+version = "0.5.4"
 description = "Official Python SDK for Gait: verify Gait identities (local JWKS or introspection) in Django and FastAPI, with live session checks, application identity, and security signals."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,19 +36,7 @@ dependencies = [
     "httpx >=0.25",
     "python-decouple >=3.6",
 
-    # NOTE: `requests` and `PyJWT` are declared but not currently imported
-    # anywhere in this package's source (gait_sdk/*.py) — verified by
-    # direct grep during SDK1. `docs/AuthIntegration_Client.md` documents that
-    # this package used `requests` (sync) before migrating to `httpx.AsyncClient`
-    # (async), so `requests` is confirmed legacy from that migration. Neither
-    # has a known current consumer relying on them being *importable from this
-    # package* specifically (as opposed to being present in their own
-    # environment already), but per SDK1 policy backward compatibility beats
-    # dependency-list neatness — left in place rather than removed on
-    # inspection alone. Candidate for a deliberate, separately-reviewed
-    # removal in a later milestone once confirmed no consumer depends on the
-    # transitive install.
-    "requests >=2.31.0",
+    # 0.5.4 (GAIT-SEC-033): `requests` removed; it was never imported.
 
     # 0.4.0: PyJWT is now used directly by gait_sdk.verification
     # (local RS256 verification against Gait's JWKS). The [crypto] extra
@@ -101,6 +89,8 @@ fastapi = [
 test = [
     "pytest >=7",
     "pytest-asyncio >=0.21",
+    # tests/test_hygiene_054.py parses the CI workflows structurally.
+    "PyYAML >=6.0",
 ]
 
 [tool.setuptools.packages.find]

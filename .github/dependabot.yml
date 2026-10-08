@@ -1,0 +1,18 @@
+# Keeps the SHA-pinned GitHub Actions (GAIT-SEC-032) and the Python
+# dependency floors current. Dependabot proposes PRs only; nothing merges or
+# publishes on its own.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  # Hash-pinned release build tools (GAIT-SEC-082).
+  - package-ecosystem: "pip"
+    directory: "/.github/requirements"
+    schedule:
+      interval: "weekly"

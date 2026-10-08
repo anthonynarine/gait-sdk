@@ -38,7 +38,6 @@ from gait_sdk.settings import GAIT_AUTH_URL, GAIT_TIMEOUT
 # ⚙️ Logger (HIPAA-safe)
 # -----------------------------------------------------------------------------
 logger = logging.getLogger("gait_sdk.client")
-logger.setLevel(logging.INFO)
 
 
 # -----------------------------------------------------------------------------

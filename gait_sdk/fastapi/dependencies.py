@@ -54,7 +54,6 @@ _WWW_AUTHENTICATE_BEARER = {"WWW-Authenticate": "Bearer"}
 # ⚙️ Logger (HIPAA-safe)
 # -----------------------------------------------------------------------------
 logger = logging.getLogger("gait_sdk.fastapi.dependencies")
-logger.setLevel(logging.INFO)
 
 
 # -----------------------------------------------------------------------------

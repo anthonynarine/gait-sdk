@@ -100,8 +100,9 @@ Because the project doesn't exist on PyPI yet, you register a *pending* publishe
 
 ### 3.2 Dry-run locally (recommended, and it teaches you what the pipeline does)
 ```bash
-python -m pip install --upgrade build twine
-python -m build                      # creates dist/*.whl and dist/*.tar.gz
+# in a fresh venv: the same hash-pinned tools CI uses
+python -m pip install --require-hashes -r .github/requirements/release.txt
+python -m build --no-isolation       # creates dist/*.whl and dist/*.tar.gz
 twine check --strict dist/*          # validates metadata + README rendering
 python -m venv /tmp/try && /tmp/try/bin/pip install dist/*.whl   # (Windows: \tmp\try\Scripts\pip)
 /tmp/try/bin/python -c "import gait_sdk; print(gait_sdk.__version__)"
