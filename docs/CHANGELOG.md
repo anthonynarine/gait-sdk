@@ -9,6 +9,14 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planned 0.6.0
+
+- Add an explicit confidential application client for the reviewed GAIT-36 BFF protocol: password/MFA, refresh, logout, status and foreground activity.
+- Require backend-only application credentials and exact instance/application configuration. Disable redirects, ambient browser credentials, environment proxies and automatic retries; surface ambiguous refresh outcomes without exposing upstream bodies.
+- Preserve existing verification interfaces. The client checks response consistency but does not replace JWT verification or application authorization. A compatible server deployment and tested BFF/browser integration are required.
+
+This is release-candidate source. Version 0.6.0 is not published by this change, and a hosted development service is not created by installing the SDK.
+
 ## [0.5.4] - 2026-10-07
 
 Hygiene release: CI supply chain, dependencies, logging and two docs fixes.
