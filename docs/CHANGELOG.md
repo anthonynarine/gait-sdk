@@ -12,6 +12,7 @@ and adheres to [Semantic Versioning](https://semver.org/).
 ### Planned 0.6.0
 
 - Add an explicit confidential application client for the reviewed GAIT-36 BFF protocol: password/MFA, refresh, logout, status and foreground activity.
+- Support GAIT-38 Optional MFA login outcomes: either an explicit pending challenge or an application-bound token pair with `mfa_required: false`. Refuse ambiguous, mixed and foreign-application responses; enabled account MFA is still enforced by Gait.
 - Require backend-only application credentials and exact instance/application configuration. Disable redirects, ambient browser credentials, environment proxies and automatic retries; surface ambiguous refresh outcomes without exposing upstream bodies.
 - Preserve existing verification interfaces. The client checks response consistency but does not replace JWT verification or application authorization. A compatible server deployment and tested BFF/browser integration are required.
 

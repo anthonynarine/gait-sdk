@@ -98,6 +98,45 @@ async def test_malformed_login_responses_denied(result):
     with pytest.raises(ConfidentialProtocolError):await client.login(email="a", password="b")
 
 
+@_run_async
+async def test_optional_password_login_returns_bound_pair_without_mfa_call():
+    result = {**pair(True), "mfa_required": False}
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=result)
+    client = AsyncConfidentialClient(CONFIG, transport=httpx.MockTransport(handler))
+    assert await client.login(email="synthetic@example.test", password="synthetic-password") == result
+    assert len(calls) == 1
+    assert calls[0].url.path.endswith("/login/")
+    assert "mfa_transaction" not in result
+
+
+@pytest.mark.parametrize("change", [
+    {"mfa_required": 0}, {"mfa_required": "false"}, {"mfa_required": None},
+    {"mfa_required": True}, {"mfa_transaction": "unexpected"}, {"expires_in": 120},
+    {"sid": APP}, {"aud": "foreign"}, {"access_token": token("foreign")},
+    {"refresh_token": ""}, {"token_type": "bearer"}, {"access_token": "malformed"},
+])
+@_run_async
+async def test_optional_login_rejects_mixed_or_unbound_responses_without_retry(change):
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={**pair(True), "mfa_required": False, **change})
+    client = AsyncConfidentialClient(CONFIG, transport=httpx.MockTransport(handler))
+    with pytest.raises(ConfidentialProtocolError):
+        await client.login(email="synthetic@example.test", password="synthetic-password")
+    assert len(calls) == 1
+
+
+@_run_async
+async def test_pair_without_explicit_login_outcome_is_not_assumed_success():
+    client = AsyncConfidentialClient(CONFIG, transport=httpx.MockTransport(lambda r: httpx.Response(200, json=pair(True))))
+    with pytest.raises(ConfidentialProtocolError):
+        await client.login(email="synthetic@example.test", password="synthetic-password")
+
+
 @pytest.mark.parametrize("bad", [{**pair(True), "aud": "foreign"}, {**pair(True), "sid": APP}, {**pair(True), "access_token": token("foreign")}, {**pair(True), "token_type": "bearer"}, {**pair(True), "access_token": "malformed"}])
 @_run_async
 async def test_pair_identity_and_shape_denied(bad):

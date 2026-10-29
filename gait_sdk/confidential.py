@@ -192,22 +192,13 @@ class AsyncConfidentialClient:
         if type(data) is not dict:
             raise ValueError()
         if operation == "login":
+            if data.get("mfa_required") is False:
+                self._validate_pair(data, application_bound=True, completed_login=True)
+                return
             if set(data) != {"mfa_required", "mfa_transaction", "expires_in"} or data["mfa_required"] is not True or not _text(data["mfa_transaction"], 128) or type(data["expires_in"]) is not int or not 0 < data["expires_in"] <= 120:
                 raise ValueError()
         elif operation in ("mfa", "refresh"):
-            required = {"access_token", "refresh_token", "token_type"} | ({"sid", "aud"} if operation == "mfa" else set())
-            if set(data) != required or data["token_type"] != "Bearer" or not _text(data["access_token"]) or not _text(data["refresh_token"]):
-                raise ValueError()
-            # Envelope consistency ONLY. No signature/issuer verification claim.
-            parts = data["access_token"].split(".")
-            if len(parts) != 3:
-                raise ValueError()
-            claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
-            if type(claims) is not dict or claims.get("aud") != self._config.audience:
-                raise ValueError()
-            _uuid(claims.get("sid"))
-            if operation == "mfa" and (data["aud"] != self._config.audience or data["sid"] != claims["sid"]):
-                raise ValueError()
+            self._validate_pair(data, application_bound=operation == "mfa")
         elif operation == "logout":
             if data != {"revoked": True} or type(data["revoked"]) is not bool:
                 raise ValueError()
@@ -256,3 +247,25 @@ class AsyncConfidentialClient:
                         raise ValueError()
                 elif "gait_mfa_time" in assurance:
                     raise ValueError()
+
+    def _validate_pair(self, data, *, application_bound, completed_login=False):
+        required = {"access_token", "refresh_token", "token_type"}
+        if application_bound:
+            required |= {"sid", "aud"}
+        if completed_login:
+            required.add("mfa_required")
+            if data.get("mfa_required") is not False:
+                raise ValueError()
+        if set(data) != required or data["token_type"] != "Bearer" or not _text(data["access_token"]) or not _text(data["refresh_token"]):
+            raise ValueError()
+        # Envelope consistency ONLY. Callers must still verify signature,
+        # issuer, audience and live session before authorizing application use.
+        parts = data["access_token"].split(".")
+        if len(parts) != 3:
+            raise ValueError()
+        claims = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+        if type(claims) is not dict or claims.get("aud") != self._config.audience:
+            raise ValueError()
+        _uuid(claims.get("sid"))
+        if application_bound and (data["aud"] != self._config.audience or data["sid"] != claims["sid"]):
+            raise ValueError()
