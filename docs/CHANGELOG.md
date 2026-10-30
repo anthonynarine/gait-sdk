@@ -18,6 +18,15 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 This is release-candidate source. Version 0.6.0 is not published by this change, and a hosted development service is not created by installing the SDK.
 
+### Release tooling security
+
+- Refresh only the release-tool lock's `certifi` leaf to `2026.10.19` for
+  [PYSEC-2026-4320](https://osv.dev/vulnerability/PYSEC-2026-4320), using
+  [official PyPI artifact hashes](https://pypi.org/pypi/certifi/2026.10.19/json).
+  Add an input floor and offline regression checks against affected lock pins.
+  This bounded update is not a full lock regeneration or a fresh dependency audit;
+  all other tool pins and SDK runtime requirements are unchanged.
+
 ## [0.5.4] - 2026-10-07
 
 Hygiene release: CI supply chain, dependencies, logging and two docs fixes.
