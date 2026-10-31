@@ -7,4 +7,4 @@ certifi>=2026.10.19
 # Build backend, installed here (hash-pinned) because the workflows build with
 # `python -m build --no-isolation`; keep it within pyproject's build-system
 # requirement.
-setuptools>=77.0
+setuptools>=84.2.1
