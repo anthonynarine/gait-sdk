@@ -21,6 +21,8 @@ your application    authorizes      — what may this person do here?
 
 That boundary is the core design rule. The SDK hands your code a verified **identity** (`subject`, `email`, and more). Roles, organizations and permissions belong to your application. See [Architecture](https://github.com/anthonynarine/gait-sdk/blob/main/docs/ARCHITECTURE.md).
 
+The unreleased 0.6.0 candidate also includes a backend-only confidential sign-in client. Its [Optional MFA login contract](gait_sdk/docs/confidential.md) describes password-only success and pending second-factor challenges. The client does not replace token verification or application authorization.
+
 ### What is Gait?
 
 **Gait** is an identity and security service at [gaitobservatory.com](https://gaitobservatory.com). Your team gets a private **workspace**: it registers each piece of software, per environment, as an **application** with its own connection key, and sees the findings those applications' security checks produce.

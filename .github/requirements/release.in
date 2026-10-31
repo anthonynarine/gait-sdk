@@ -1,7 +1,9 @@
 # Release build tools (GAIT-SEC-082). Edit this file, then regenerate
-# release.txt with the command at the top of release.txt.
+# release.txt with the options at its top, advancing the historical cutoff.
 build
 twine
+# PYSEC-2026-4320: keep the release toolchain's CA bundle above the fixed floor.
+certifi>=2026.10.19
 # Build backend, installed here (hash-pinned) because the workflows build with
 # `python -m build --no-isolation`; keep it within pyproject's build-system
 # requirement.

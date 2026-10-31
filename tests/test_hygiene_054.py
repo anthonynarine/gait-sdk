@@ -201,6 +201,24 @@ def check_release_tool_installs(docs):
     return problems
 
 
+def check_release_certifi_floor(text):
+    """Reject the known affected CA bundle in the release tooling lock.
+
+    PYSEC-2026-4320 records 2026.10.19 as the fixed certifi version. This
+    narrow offline regression guard is not a current dependency audit.
+    https://osv.dev/vulnerability/PYSEC-2026-4320
+    """
+    entries = [line.strip() for line in text.replace("\\\n", " ").splitlines()
+               if line.strip() and not line.lstrip().startswith("#")]
+    certifi = [entry for entry in entries if re.match(r"(?i)^certifi\b", entry)]
+    if len(certifi) != 1:
+        return ["release lock must contain one exact certifi pin"]
+    version = re.match(r"^certifi==([0-9]+(?:\.[0-9]+)+)\s", certifi[0], re.IGNORECASE)
+    if not version or tuple(map(int, version[1].split("."))) < (2026, 10, 19):
+        return ["release certifi must be at least 2026.10.19 (PYSEC-2026-4320)"]
+    return []
+
+
 # -----------------------------------------------------------------------------
 # GAIT-SEC-032 / 080 / 081 / 082 against the repository
 # -----------------------------------------------------------------------------
@@ -272,6 +290,32 @@ def test_release_requirements_are_hash_pinned():
         assert "--hash=sha256:" in entry, f"no hash: {entry[:60]}"
         names.add(entry.split("==")[0].lower())
     assert {"build", "twine", "setuptools"} <= names
+
+
+@needs_checkout
+def test_release_certifi_excludes_known_affected_versions():
+    assert check_release_certifi_floor((ROOT / RELEASE_REQUIREMENTS).read_text()) == []
+
+
+@needs_checkout
+@pytest.mark.parametrize("version", ["2019.3.9", "2026.7.22", "2026.10.18"])
+def test_release_certifi_guard_denies_affected_lock_mutations(version):
+    text = (ROOT / RELEASE_REQUIREMENTS).read_text()
+    mutated, count = re.subn(r"(?m)^certifi==[^\s]+", "certifi==" + version, text)
+    assert count == 1, "certifi mutation anchor missing"
+    assert check_release_certifi_floor(mutated), "accepted an affected certifi lock"
+
+
+@pytest.mark.parametrize("entry", ["", "certifi>=2026.10.19 --hash=sha256:synthetic",
+    "certifi==2026.10.19rc1 --hash=sha256:synthetic",
+    "certifi==2026.10.19 --hash=sha256:synthetic\ncertifi==2026.7.22 --hash=sha256:synthetic"])
+def test_release_certifi_guard_denies_missing_or_ambiguous_pin(entry):
+    assert check_release_certifi_floor(entry)
+
+
+@pytest.mark.parametrize("version", ["2026.10.19", "2026.10.23"])
+def test_release_certifi_guard_accepts_fixed_floor_and_newer(version):
+    assert check_release_certifi_floor(f"certifi=={version} --hash=sha256:synthetic") == []
 
 
 # Mutations of the real workflows (in memory only), each of which must be

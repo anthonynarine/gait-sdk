@@ -9,6 +9,24 @@ and adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planned 0.6.0
+
+- Add an explicit confidential application client for the reviewed GAIT-36 BFF protocol: password/MFA, refresh, logout, status and foreground activity.
+- Support GAIT-38 Optional MFA login outcomes: either an explicit pending challenge or an application-bound token pair with `mfa_required: false`. Refuse ambiguous, mixed and foreign-application responses; enabled account MFA is still enforced by Gait.
+- Require backend-only application credentials and exact instance/application configuration. Disable redirects, ambient browser credentials, environment proxies and automatic retries; surface ambiguous refresh outcomes without exposing upstream bodies.
+- Preserve existing verification interfaces. The client checks response consistency but does not replace JWT verification or application authorization. A compatible server deployment and tested BFF/browser integration are required.
+
+This is release-candidate source. Version 0.6.0 is not published by this change, and a hosted development service is not created by installing the SDK.
+
+### Release tooling security
+
+- Refresh only the release-tool lock's `certifi` leaf to `2026.10.19` for
+  [PYSEC-2026-4320](https://osv.dev/vulnerability/PYSEC-2026-4320), using
+  [official PyPI artifact hashes](https://pypi.org/pypi/certifi/2026.10.19/json).
+  Add an input floor and offline regression checks against affected lock pins.
+  This bounded update is not a full lock regeneration or a fresh dependency audit;
+  all other tool pins and SDK runtime requirements are unchanged.
+
 ## [0.5.4] - 2026-10-07
 
 Hygiene release: CI supply chain, dependencies, logging and two docs fixes.
