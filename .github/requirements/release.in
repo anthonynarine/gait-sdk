@@ -3,7 +3,7 @@
 build
 twine
 # PYSEC-2026-4320: keep the release toolchain's CA bundle above the fixed floor.
-certifi>=2026.10.19
+certifi>=2026.11.20
 # Build backend, installed here (hash-pinned) because the workflows build with
 # `python -m build --no-isolation`; keep it within pyproject's build-system
 # requirement.
